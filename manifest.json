@@ -1,0 +1,136 @@
+{
+ "version": "1.0.2",
+ "date": "2026-11-03T19:58:48.017Z",
+ "files": [
+  {
+   "path": "assets/bg/bridge.png",
+   "sha1": "24ecb1d8c6c5d133bb5537b73aeeee0f5e0c65c2",
+   "size": 2316051
+  },
+  {
+   "path": "assets/bg/kiss.png",
+   "sha1": "b6d617bc061aa4eaf3162c33b408e76eb000c3e9",
+   "size": 2021503
+  },
+  {
+   "path": "assets/characters/nv1.png",
+   "sha1": "2f8cde7b2a412bc14293af9400faea9ecaac890e",
+   "size": 216103
+  },
+  {
+   "path": "assets/characters/nv1_kiss.png",
+   "sha1": "d7fbebd0113051bd09d3b1b1bf0744c1333402c8",
+   "size": 170552
+  },
+  {
+   "path": "assets/characters/nv2.png",
+   "sha1": "4201c15cd4705db481eae9aede494bde2c7dd48e",
+   "size": 203838
+  },
+  {
+   "path": "assets/characters/nv2_kiss.png",
+   "sha1": "c16e31f827179780006bf8056623e2827ac0842d",
+   "size": 167875
+  },
+  {
+   "path": "assets/characters/nv3.png",
+   "sha1": "2571aa0fdce7c5e7d7f09b46c0316baa9104b405",
+   "size": 246839
+  },
+  {
+   "path": "assets/characters/nv3_kiss.png",
+   "sha1": "23e800420bc771847626b93d985305a15cb7cb87",
+   "size": 201077
+  },
+  {
+   "path": "assets/characters/nv4.png",
+   "sha1": "66c0095d45487d1c50754172114c93b31b5d329d",
+   "size": 275081
+  },
+  {
+   "path": "assets/characters/nv4_kiss.png",
+   "sha1": "3943c3b020bd689d8619fc18130ae25dac6fe2d0",
+   "size": 217111
+  },
+  {
+   "path": "assets/characters/nv5.png",
+   "sha1": "61393efc05a9bf8bf817b03ec94be764d3648efd",
+   "size": 226161
+  },
+  {
+   "path": "assets/characters/nv5_kiss.png",
+   "sha1": "b96a4569567c5557df22ff7b7a4b0071ad3a6dd5",
+   "size": 180231
+  },
+  {
+   "path": "assets/fonts/baloo-2-latin-800-normal.woff2",
+   "sha1": "694f2e10bbbe2b0d83b8e2e2649c0dcaf6f35220",
+   "size": 18632
+  },
+  {
+   "path": "assets/fonts/baloo-2-latin-ext-800-normal.woff2",
+   "sha1": "614910b6a6dc7db0f0cdd26b55e12b7084f77308",
+   "size": 15068
+  },
+  {
+   "path": "assets/fonts/baloo-2-vietnamese-800-normal.woff2",
+   "sha1": "297468ed65a3bebf4ed09d1982e007bdb3d27e88",
+   "size": 4796
+  },
+  {
+   "path": "assets/fonts/vt323-latin-400-normal.woff2",
+   "sha1": "4f33d638cb5dc09acc0e940bd2ae4cab1d1c8744",
+   "size": 17936
+  },
+  {
+   "path": "assets/fonts/vt323-latin-ext-400-normal.woff2",
+   "sha1": "7375d8ab69e5bced1445e2c6f7472c83953b6694",
+   "size": 16372
+  },
+  {
+   "path": "assets/fonts/vt323-vietnamese-400-normal.woff2",
+   "sha1": "f76413bde92dede44a1606a8580a8c175b608771",
+   "size": 7932
+  },
+  {
+   "path": "assets/frames/frame1.png",
+   "sha1": "7d5fdba148e49c6ebbcf19acb2a94c39b1ae0d5e",
+   "size": 1509195
+  },
+  {
+   "path": "assets/frames/frame2.png",
+   "sha1": "a0760db08738483804d2c78debd82d4d34ec4eec",
+   "size": 2246218
+  },
+  {
+   "path": "assets/frames/frame3.png",
+   "sha1": "1e06ec36ecc566cb7e3ccdd134abf5bc4e09f194",
+   "size": 2181769
+  },
+  {
+   "path": "assets/frames/frame4.png",
+   "sha1": "868e97f184f1ccfe17608b9bb770239366794f43",
+   "size": 2316899
+  },
+  {
+   "path": "panel.html",
+   "sha1": "3cefc71e3fa56fd3d86ff08627c30b504bf43023",
+   "size": 18258
+  },
+  {
+   "path": "panel.js",
+   "sha1": "4df2146372719b35b3bf21cb160b27bb51df4af0",
+   "size": 7561
+  },
+  {
+   "path": "stage.html",
+   "sha1": "eb3e778f725929d0ff0205ff38acad7eae5f542a",
+   "size": 2479
+  },
+  {
+   "path": "stage.js",
+   "sha1": "1f9df5e868225bf0e783de17db2f6fcee2710849",
+   "size": 45343
+  }
+ ]
+}
