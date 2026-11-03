@@ -41,13 +41,16 @@ $$('[data-k]').forEach(el => {
 
 function renderTiers() {
   const t = $('#tiers'); if (t.contains(document.activeElement)) return;
-  t.innerHTML = '<tr><td class="hint">Mức</td><td class="hint">Từ (xu)</td><td class="hint">Tên</td><td class="hint">Khung</td></tr>' +
-    S.tiers.map((x, i) => `<tr><td>${i + 1}</td><td><input type="number" min="1" data-ti="${i}" data-f="coins" value="${x.coins}"></td>
+  t.innerHTML = '<tr><td class="hint">Mức</td><td class="hint">Từ (xu)</td><td class="hint">Tốc độ x</td><td class="hint">Hôn liền</td><td class="hint">Tên</td><td class="hint">Khung</td></tr>' +
+    S.tiers.map((x, i) => `<tr><td>${i + 1}</td><td><input type="number" min="1" data-ti="${i}" data-f="coins" value="${x.coins}" style="width:60px"></td>
+      <td><input type="number" min="1" step="0.5" data-ti="${i}" data-f="speed" value="${x.speed || 1}" style="width:55px"></td>
+      <td><input type="number" min="0" data-ti="${i}" data-f="chain" value="${x.chain || 0}" style="width:50px" title="0 = không"></td>
       <td><input type="text" data-ti="${i}" data-f="label" value="${esc(x.label)}"></td>
       <td><select data-ti="${i}" data-f="frame">${frames.map(f => `<option ${f === x.frame ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></td></tr>`).join('');
   t.querySelectorAll('[data-ti]').forEach(el => el.onchange = () => {
     const tiers = JSON.parse(JSON.stringify(S.tiers));
-    tiers[el.dataset.ti][el.dataset.f] = el.dataset.f === 'coins' ? Math.max(1, parseInt(el.value) || 1) : el.value;
+    const f = el.dataset.f;
+    tiers[el.dataset.ti][f] = f === 'coins' ? Math.max(1, parseInt(el.value) || 1) : f === 'speed' ? Math.max(1, parseFloat(el.value) || 1) : f === 'chain' ? Math.max(0, parseInt(el.value) || 0) : el.value;
     API.setSettings({ tiers }).then(s => S = s);
   });
 }
@@ -95,7 +98,8 @@ $('#btnAD').onclick = () => API.openAppDir();
 
 // queue view
 function qList(el, arr, side) {
-  el.innerHTML = arr.slice(0, 80).map((p, i) => `<div class="${p.coins ? 'don' : ''}"><b>${i + 1}</b><span title="${esc(p.id)}">${p.coins ? '💎' : ''}${esc(p.name)}${p.coins ? ' · ' + p.coins + 'xu' : ''}</span>
+  const ic = { yard: '🏖', bridge: '🌉', center: '💗' };
+  el.innerHTML = arr.slice(0, 80).map((p, i) => `<div class="${p.coins ? 'don' : ''}"><b>${ic[p.state] || ''}</b><span title="${esc(p.id)}">${esc(p.name)}${p.state === 'bridge' ? ' · ' + p.steps + ' bước' : ''}${p.coins ? ' · ' + p.coins + 'xu' : ''}${p.chain ? ' · 💋x' + p.chain : ''}</span>
     <button class="b s" data-cmd='${esc(JSON.stringify({ type: 'promote', id: p.id }))}'>⬆</button>
     <button class="b s" data-cmd='${esc(JSON.stringify({ type: 'move', id: p.id }))}'>⇄</button>
     <button class="b s" data-cmd='${esc(JSON.stringify({ type: 'remove', id: p.id }))}'>✕</button></div>`).join('') + (arr.length > 80 ? `<div class="hint">… và ${arr.length - 80} người nữa</div>` : '');
@@ -103,10 +107,12 @@ function qList(el, arr, side) {
 let lastQ = '';
 API.onStageState(st => {
   $('#cL').textContent = st.L.length; $('#cR').textContent = st.R.length;
+  if (st.counts) { $('#cYard').textContent = st.counts.yard; $('#cBridge').textContent = st.counts.bridge; $('#cCenter').textContent = st.counts.center; }
+  $('#btnAutoLike').textContent = '❤ Tự thả tim: ' + (st.autoLike ? 'BẬT' : 'TẮT');
   $('#qLn').textContent = st.L.length; $('#qRn').textContent = st.R.length;
   $('#cDone').textContent = st.done; $('#cVoice').textContent = st.voiceQ;
-  $('#pairNow').textContent = st.pair ? `💋 ${st.pair[0].name}  ❤  ${st.pair[1].name}  (${st.phase})` : 'Đang chờ cặp tiếp theo…';
-  const sig = JSON.stringify([st.L.map(p => p.id + p.coins), st.R.map(p => p.id + p.coins)]);
+  $('#pairNow').textContent = st.pair ? `💋 ${st.pair[0].name}  ❤  ${st.pair[1].name}${st.chain ? '  (hôn liền ' + st.chain[0] + '/' + st.chain[1] + ')' : ''}  (${st.phase})` : 'Đang chờ cặp tiếp theo…';
+  const sig = JSON.stringify([st.L.map(p => p.id + p.state + p.steps + p.coins), st.R.map(p => p.id + p.state + p.steps + p.coins)]);
   if (sig !== lastQ && !$('#t-queue').matches(':hover')) { lastQ = sig; qList($('#qL'), st.L, 'L'); qList($('#qR'), st.R, 'R'); }
 });
 API.onLog(log);

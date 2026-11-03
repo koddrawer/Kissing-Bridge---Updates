@@ -1,6 +1,6 @@
 {
- "version": "1.0.2",
- "date": "2026-11-03T19:58:48.017Z",
+ "version": "1.1.0",
+ "date": "2026-11-03T20:52:56.715Z",
  "files": [
   {
    "path": "assets/bg/bridge.png",
@@ -114,13 +114,13 @@
   },
   {
    "path": "panel.html",
-   "sha1": "3cefc71e3fa56fd3d86ff08627c30b504bf43023",
-   "size": 18258
+   "sha1": "ecbec2f5074d14962028f747baf0bf5ccb44890e",
+   "size": 20525
   },
   {
    "path": "panel.js",
-   "sha1": "4df2146372719b35b3bf21cb160b27bb51df4af0",
-   "size": 7561
+   "sha1": "b437f3f16519ddca9db618beac793cdca2de9501",
+   "size": 8547
   },
   {
    "path": "stage.html",
@@ -129,8 +129,8 @@
   },
   {
    "path": "stage.js",
-   "sha1": "1f9df5e868225bf0e783de17db2f6fcee2710849",
-   "size": 45343
+   "sha1": "b12eaf0c24e07016b6dc07d29169154a9c40ebbb",
+   "size": 57713
   }
  ]
 }

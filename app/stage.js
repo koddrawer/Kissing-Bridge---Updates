@@ -170,99 +170,148 @@ let PATH = { L: null, R: null };
 function rebuildPaths() { PATH.L = makePath(cfg.bridge.leftPath); PATH.R = makePath(cfg.bridge.rightPath); }
 
 // ---------------------------------------------------------------- state
-const Q = { L: [], R: [] };
-const done = new Map();        // id -> time finished (ms)
+// Every viewer is a person. state: 'yard' (sân chờ) | 'bridge' (đang đi) | 'center' (đứng chờ giữa cầu) | 'kiss'
+const PEOPLE = new Map();
+const followed = new Set();         // follow chỉ tính 1 lần / người (huỷ follow rồi follow lại không tính)
 let seq = 0, sideToggle = 0;
-let scene = 'bridge';          // bridge | kiss
-let pair = null;               // current kiss pair
-let fade = { a: 0, to: 0, cb: null };
+let scene = 'bridge';               // bridge | kiss
+let pair = null;                    // current kiss
 const chat = [];
 const toasts = [];
-const hearts = [];             // particles
+const hearts = [];                  // particles
 const sparkles = [];
+let autoLikeTimer = null;
 
-function findPerson(id) {
-  for (const s of ['L', 'R']) { const i = Q[s].findIndex(p => p.id === id); if (i >= 0) return { p: Q[s][i], side: s, i }; }
-  if (pair) for (const p of [pair.a, pair.b]) if (p.id === id) return { p, side: 'pair', i: -1 };
-  return null;
-}
-function tierFor(coins) {
-  let t = 0; (cfg.tiers || []).forEach((x, i) => { if (coins >= x.coins) t = i + 1; }); return t;
-}
+const G = () => cfg.game;
+const all = () => [...PEOPLE.values()];
+const onSide = (side, states) => all().filter(p => p.side === side && states.includes(p.state));
+const other = s => s === 'L' ? 'R' : 'L';
+const sideName = s => s === 'L' ? 'TRÁI' : 'PHẢI';
+function stepLen(side) { return PATH[side].len / Math.max(1, G().steps); }
+function tierFor(coins) { let t = 0; (cfg.tiers || []).forEach((x, i) => { if (coins >= x.coins) t = i + 1; }); return t; }
+const tierObj = p => cfg.tiers[p.tier - 1];
+const speedOf = p => { const t = tierObj(p); return t && t.speed ? t.speed : 1; };
+function findPerson(id) { const p = PEOPLE.get(id); return p ? { p, side: p.side } : null; }
+
 function newPerson(user) {
   const p = {
     id: user.id, name: user.name || user.id, avatar: user.avatar || '', avatarImg: null,
-    char: Math.floor(Math.random() * Math.max(1, CHARS.length)), coins: 0, tier: 0, seq: ++seq,
-    d: 0, x: 0, y: 0, moving: false, phase: Math.random() * 6, waitT: 0
+    char: Math.floor(Math.random() * Math.max(1, CHARS.length)), coins: 0, tier: 0, chain: 0, seq: ++seq,
+    state: 'yard', steps: 0, d: 0, x: 0, y: 0, moving: false, phase: Math.random() * 6,
+    lastLike: 0, enterT: 0, arriveSeq: 0, arriveT: 0, active: Date.now()
   };
-  if (p.avatar) loadRemote(p.avatar).then(im => { if (im) { p.avatarImg = im; p._comp = null; } });
+  if (p.avatar) loadAvatar(p);
   return p;
 }
+function loadAvatar(p) { loadRemote(p.avatar).then(im => { if (im) { p.avatarImg = im; p._comp = null; } }); }
 
-function addViewer(user, reason) {
+// find or create (new people start in the yard)
+function ensurePerson(user, quiet) {
   if (!user || !user.id || !CHARS.length) return null;
-  const f = findPerson(user.id);
-  if (f) { if (user.avatar && !f.p.avatar) { f.p.avatar = user.avatar; loadRemote(user.avatar).then(im => { if (im) { f.p.avatarImg = im; f.p._comp = null; } }); } return f.p; }
-  if (reason !== 'gift') {
-    const t = done.get(user.id);
-    if (t && Date.now() - t < cfg.join.rejoinMinutes * 60000) return null;
+  let p = PEOPLE.get(user.id);
+  if (p) {
+    if (user.avatar && !p.avatar) { p.avatar = user.avatar; loadAvatar(p); }
+    if (user.name && user.name !== p.name) p.name = user.name;
+    p.active = Date.now();
+    return p;
   }
-  let side;
-  if (Q.L.length !== Q.R.length) side = Q.L.length < Q.R.length ? 'L' : 'R';
-  else side = (sideToggle++ % 2) ? 'R' : 'L';
-  if (reason !== 'gift' && Q[side].length >= cfg.join.maxQueue) return null;
-  const p = newPerson(user);
-  p.side = side;
-  Q[side].push(p);
-  if (reason !== 'gift') {
-    toast('👋 ' + shortName(p.name, 18) + ' vào hàng ' + (side === 'L' ? 'TRÁI' : 'PHẢI'), '#ffe7a8', 2.2);
+  const cL = all().filter(x => x.side === 'L').length, cR = all().filter(x => x.side === 'R').length;
+  const side = cL !== cR ? (cL < cR ? 'L' : 'R') : ((sideToggle++ % 2) ? 'R' : 'L');
+  p = newPerson(user); p.side = side;
+  PEOPLE.set(p.id, p);
+  pruneYard(side);
+  if (!quiet) {
+    toast('👋 ' + shortName(p.name, 18) + ' vào sân chờ ' + sideName(side), '#ffe7a8', 2.2);
     if (cfg.voice.welcome) say(tpl(cfg.voice.welcomeTpl, { name: speakName(p.name), side: side === 'L' ? 'trái' : 'phải' }), 'welcome');
     sfx('join');
   }
   return p;
 }
-
-function sortSide(side) {
-  const q = Q[side];
-  // a front person who already reached the center while the other side is ready keeps the spot
-  const lockFront = q[0] && q[0].d >= PATH[side].len - 2 && Q[side === 'L' ? 'R' : 'L'][0];
-  const head = lockFront ? [q.shift()] : [];
-  q.sort((a, b) => (b.coins > 0) - (a.coins > 0) || (b.coins - a.coins) || (a.donorSeq || a.seq) - (b.donorSeq || b.seq));
-  Q[side] = head.concat(q);
+function pruneYard(side) {
+  const y = onSide(side, ['yard']);
+  const max = G().maxYard || 200;
+  if (y.length <= max) return;
+  y.sort((a, b) => a.active - b.active).slice(0, y.length - max).forEach(p => { if (!p.coins) PEOPLE.delete(p.id); });
 }
 
-function onGift(user, coins, giftName, count) {
-  let p = addViewer(user, 'gift');
+function toBridge(p, why) {
+  if (!p || p.state !== 'yard') return false;
+  p.state = 'bridge'; p.steps = 0; p.d = 0; p.lastLike = now(); p.enterT = now(); p.active = Date.now();
+  p.fromX = p.x; p.fromY = p.y;
+  toast('🌉 ' + shortName(p.name, 16) + ' lên cầu ' + sideName(p.side) + ' · thả tim để bước!', '#bfe9ff', 2.4);
+  sfx('join');
+  return true;
+}
+function toYard(p, reason) {
   if (!p) return;
-  p.coins += coins; p.donorSeq = p.donorSeq || ++seq;
+  if (reason === 'idle') {
+    for (let i = 0; i < 6; i++) spawnHeart(p.x, p.y - 40, true);
+    toast('⌛ ' + shortName(p.name, 16) + ' rời cầu vì không thả tim', '#ffc2c2', 2.4);
+    sfx('poof');
+  }
+  p.state = 'yard'; p.steps = 0; p.d = 0; p.dash = false; p.arriveSeq = 0;
+  if (reason === 'kiss') { p.coins = 0; p.tier = 0; p.chain = 0; }
+}
+function arrive(p) {
+  if (p.state !== 'bridge') return;
+  p.state = 'center'; p.steps = G().steps; p.arriveSeq = ++seq; p.arriveT = now();
+  sfx('arrive');
+}
+function addSteps(p, n) {
+  if (!p || p.state !== 'bridge') return;
+  p.lastLike = now();
+  p.steps = Math.min(G().steps, p.steps + n * speedOf(p));
+  if (p.steps >= G().steps) arrive(p);
+}
+
+// ---------------------------------------------------------------- events
+function onEngage(user, kind) {
+  const j = cfg.join;
+  if (kind === 'chat' && !j.onComment) return;
+  if (kind === 'follow' && !j.onFollow) return;
+  if (kind === 'share' && !j.onShare) return;
+  if (kind === 'follow') { if (followed.has(user.id)) return; followed.add(user.id); }
+  const p = ensurePerson(user, true);
+  if (p) toBridge(p, kind);
+}
+function onLike(user, count) {
+  const p = ensurePerson(user, true);
+  if (p && p.state === 'bridge') addSteps(p, Math.max(1, count || 1));
+}
+function onGift(user, coins, giftName, count) {
+  const p = ensurePerson(user, true);
+  if (!p) return;
+  p.coins += coins;
   const old = p.tier; p.tier = tierFor(p.coins);
-  if (p.side && Q[p.side].includes(p)) sortSide(p.side);
+  const t = tierObj(p);
+  if (p.state === 'yard') toBridge(p, 'gift');
+  if (p.state === 'bridge') p.lastLike = now();
+  if (t && t.chain && !p.chain) {
+    p.chain = t.chain;
+    if (p.state === 'bridge') { p.dash = true; arrive(p); }          // chạy thẳng ra giữa cầu
+  }
   if (pair && (pair.a === p || pair.b === p) && pair.phase !== 'showcase' && pair.phase !== 'out') pair.tier = Math.max(pair.a.tier, pair.b.tier);
-  const t = cfg.tiers[p.tier - 1];
-  toast('🎁 ' + shortName(p.name, 16) + ' tặng ' + giftName + (count > 1 ? ' x' + count : '') + (t ? ' → ' + t.label : '') + ' · LÊN ĐẦU HÀNG!', '#ffd34d', 4, true);
-  say(tpl(cfg.voice.giftTpl, { name: speakName(p.name), gift: giftName + (count > 1 ? ' ' + count + ' lần' : '') }), 'gift');
+  const extra = t ? (t.chain ? ' → 💋 Hôn liền ' + t.chain + ' người!' : ' → ⚡ tốc độ x' + t.speed) : '';
+  toast('🎁 ' + shortName(p.name, 16) + ' tặng ' + giftName + (count > 1 ? ' x' + count : '') + extra, '#ffd34d', 4, true);
+  say(tpl(t && t.chain ? cfg.voice.chainTpl || cfg.voice.giftTpl : cfg.voice.giftTpl, { name: speakName(p.name), gift: giftName + (count > 1 ? ' ' + count + ' lần' : ''), n: t && t.chain, speed: t && t.speed }), 'gift');
   sfx('gift');
   for (let i = 0; i < 12; i++) spawnHeart(p.x || WW / 2, (p.y || 900) - 60, true);
-  if (p.tier > old) log(`${p.name} đạt mức ${p.tier}`);
+  if (p.tier > old) log(`${p.name} đạt mức ${p.tier} (${p.coins} xu)`);
 }
-
 function onChat(user, text) {
   chat.push({ name: user.name, text, avatar: null, t: now() });
   loadRemote(user.avatar).then(im => { const m = chat.find(c => c.name === user.name && c.text === text); if (m) m.avatar = im; });
   while (chat.length > 30) chat.shift();
 }
+function removeId(id) { const p = PEOPLE.get(id); if (p && p.state !== 'kiss') PEOPLE.delete(id); }
 
-function removeId(id) { for (const s of ['L', 'R']) Q[s] = Q[s].filter(p => p.id !== id); }
-
-// ---------------------------------------------------------------- events
 function handleEvent(ev) {
-  const j = cfg.join;
   switch (ev.type) {
-    case 'chat': onChat(ev.user, ev.text); if (j.onComment) addViewer(ev.user, 'chat'); break;
-    case 'join': if (j.onMember) addViewer(ev.user, 'join'); break;
-    case 'like': if (j.onLike) addViewer(ev.user, 'like'); break;
-    case 'follow': if (j.onFollow) addViewer(ev.user, 'follow'); break;
-    case 'share': if (j.onShare) addViewer(ev.user, 'share'); break;
+    case 'chat': onChat(ev.user, ev.text); onEngage(ev.user, 'chat'); break;
+    case 'join': if (cfg.join.onMember) ensurePerson(ev.user, false); break;
+    case 'like': onLike(ev.user, ev.count); break;
+    case 'follow': onEngage(ev.user, 'follow'); break;
+    case 'share': onEngage(ev.user, 'share'); break;
     case 'gift': onGift(ev.user, ev.coins || 1, ev.gift || 'quà', ev.count || 1); break;
   }
 }
@@ -348,6 +397,8 @@ function sfx(name) {
     else if (name === 'sparkle') { [1568, 2093, 2637, 3136].forEach((f, i) => tone(f, i * .06, .2, 'triangle', .1)); }
     else if (name === 'fanfare') { [[523, 0], [523, .14], [523, .28], [659, .42], [784, .7], [659, .9], [784, 1.05], [1047, 1.2]].forEach(([f, t]) => tone(f, t, .22, 'square', .12)); }
     else if (name === 'heart') { tone(1760, 0, .05, 'square', .05); }
+    else if (name === 'poof') { noise(0, .25, .2, 700); tone(500, 0, .25, 'square', .06, 150); }
+    else if (name === 'arrive') { [784, 988, 1175].forEach((f, i) => tone(f, i * .08, .12, 'square', .08)); }
   } catch {}
 }
 
@@ -414,31 +465,69 @@ function fitText(s, size, maxW, font = 'B2') {
 function rrect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
 
 // ---------------------------------------------------------------- bridge scene
-function slotTarget(side, i) { return PATH[side].len - i * cfg.timing.slotSpacing; }
 function scaleAtY(y) {
   const p = cfg.bridge, near = 1250, far = 882;
   return lerp(p.farScale, 1, clamp((y - far) / (near - far), 0, 1));
 }
+function yardRect(side) { return (cfg.yard || {})[side]; }
+function layoutYard(side) {
+  const Y = cfg.yard, R = yardRect(side);
+  const list = onSide(side, ['yard']).sort((a, b) => b.active - a.active);
+  const show = list.slice(0, Y.maxShow);
+  const perRow = Math.max(1, Math.ceil(show.length / 2));
+  const cols = Math.max(perRow, Math.floor(Y.maxShow / 2));
+  show.forEach((p, i) => {
+    const row = i % 2, col = (i / 2) | 0;
+    const sp = (R.w - 30) / cols;
+    p.x = R.x + 15 + sp * (col + .5) + (row ? sp * .5 : 0) - sp * .25;
+    if (p.x > R.x + R.w - 12) p.x -= sp;
+    p.y = R.y + R.h - 10 - (row ? Y.rowGap : 0);
+    p.vis = true; p.yRow = row;
+  });
+  list.slice(Y.maxShow).forEach(p => { p.vis = false; p.x = R.x + R.w / 2; p.y = R.y + R.h - 8; });
+  return { list, show };
+}
 function updBridge(dt) {
-  const T = cfg.timing;
+  const T = cfg.timing, g = G(), tnow = now();
   for (const side of ['L', 'R']) {
-    const q = Q[side];
-    q.forEach((p, i) => {
-      const tgt = slotTarget(side, i);
-      if (tgt < 0 && p.d <= 0) { p.vis = false; p.moving = false; return; }
-      p.vis = true;
-      const diff = Math.max(0, tgt) - p.d;
-      if (diff > 0.5) { p.d += Math.min(diff, T.walkSpeed * dt); p.moving = true; }
-      else p.moving = false;
-      const [x, y] = PATH[side].at(p.d); p.x = x; p.y = y;
-      if (i === 0 && p.d >= PATH[side].len - 1) p.waitT += dt; else if (i === 0) p.waitT = 0;
-    });
+    const len = PATH[side].len, stepPx = stepLen(side);
+    const centers = onSide(side, ['center']).sort((a, b) => a.arriveSeq - b.arriveSeq);
+    centers.forEach((p, i) => { p.tgt = len - i * T.slotSpacing; p.cIdx = i; });
+    const backLimit = len - centers.length * T.slotSpacing;
+    for (const p of onSide(side, ['bridge'])) {
+      p.tgt = Math.min(p.steps * stepPx, Math.max(0, backLimit - 4));
+      if (tnow - p.lastLike > g.idleSec) { toYard(p, 'idle'); continue; }
+    }
+    for (const p of onSide(side, ['bridge', 'center'])) {
+      const diff = p.tgt - p.d;
+      const sp = T.walkSpeed * (p.dash ? 5 : 1) * (diff > 120 ? 1.8 : 1);
+      if (Math.abs(diff) > .5) { p.d += Math.sign(diff) * Math.min(Math.abs(diff), sp * dt); p.moving = true; }
+      else { p.moving = false; if (p.dash && p.state === 'center') p.dash = false; }
+      let [x, y] = PATH[side].at(p.d);
+      const e = clamp((tnow - p.enterT) / .6, 0, 1);
+      if (e < 1 && p.fromX != null) { x = lerp(p.fromX, x, ease(e)); y = lerp(p.fromY, y, ease(e)); p.moving = true; }
+      p.x = x; p.y = y; p.vis = true;
+    }
+    layoutYard(side);
   }
-  // pair up
-  if (scene === 'bridge' && !pair) {
-    const a = Q.L[0], b = Q.R[0];
-    if (a && b && a.waitT >= T.waitAtEndSec && b.waitT >= T.waitAtEndSec) startKiss(a, b);
+  if (scene === 'bridge' && !pair) tryPair();
+}
+function readyAtCenter(p) { return p.state === 'center' && now() - p.arriveT >= cfg.timing.waitAtEndSec && Math.abs(p.d - p.tgt) < 3; }
+function pickPartners(side, n) {
+  const c = onSide(side, ['center']).sort((a, b) => a.arriveSeq - b.arriveSeq);
+  const b = onSide(side, ['bridge']).sort((a, b) => b.steps - a.steps);
+  const y = onSide(side, ['yard']).sort((a, b) => b.active - a.active);
+  return [...c, ...b, ...y].slice(0, n);
+}
+function tryPair() {
+  const centers = all().filter(p => p.state === 'center').sort((a, b) => a.arriveSeq - b.arriveSeq);
+  const owner = centers.find(p => p.chain > 0 && readyAtCenter(p));
+  if (owner) {
+    const partners = pickPartners(other(owner.side), owner.chain);
+    if (partners.length) return startKiss(owner, partners);
   }
+  const a = centers.find(p => p.side === 'L'), b = centers.find(p => p.side === 'R');
+  if (a && b && readyAtCenter(a) && readyAtCenter(b)) startKiss(a, [b]);
 }
 function drawPerson(p, x, y, h, pose, flip, alpha = 1) {
   const c = comp(p, pose); if (!c) return;
@@ -452,41 +541,72 @@ function drawPerson(p, x, y, h, pose, flip, alpha = 1) {
   ctx.restore();
   return { top: y - h, s };
 }
+const TIER_COL = ['#ff6fa0', '#3aa0ff', '#e8343c', '#f5b400'];
 function drawNameTag(p, x, y, size) {
   const name = fitText(shortName(p.name, 16), size, 220);
-  const t = cfg.tiers[p.tier - 1];
   if (p.tier) {
     ctx.font = '800 ' + size + 'px B2, sans-serif'; const w = ctx.measureText(name).width + size * 1.4;
     rrect(x - w / 2, y - size * .75, w, size * 1.5, size * .5);
-    ctx.fillStyle = ['#ff6fa0', '#3aa0ff', '#e8343c', '#f5b400'][(p.tier - 1) % 4]; ctx.fill();
+    ctx.fillStyle = TIER_COL[(p.tier - 1) % 4]; ctx.fill();
     ctx.lineWidth = 2; ctx.strokeStyle = '#fff3c4'; ctx.stroke();
     txt(name, x, y + 1, size, '#fff', 'center', '#2a0712', size * .18);
   } else txt(name, x, y, size, '#fff', 'center', '#2a0712');
 }
+function drawYardPlaque(side) {
+  const R = yardRect(side), n = onSide(side, ['yard']).length;
+  ctx.fillStyle = 'rgba(70,12,36,.55)'; rrect(R.x, R.y, R.w, R.h, 16); ctx.fill();
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,211,77,.85)'; ctx.stroke();
+  const label = '🏖 SÂN CHỜ ' + sideName(side) + ' · ' + n;
+  ctx.font = '800 17px B2, sans-serif';
+  const w = ctx.measureText(label).width + 22, lx = R.x + (R.w - w) / 2;
+  ctx.fillStyle = '#b3123f'; rrect(lx, R.y - 26, w, 26, 13); ctx.fill();
+  ctx.lineWidth = 2; ctx.strokeStyle = '#ffd34d'; ctx.stroke();
+  txt(label, lx + w / 2, R.y - 12, 17, '#ffe066', 'center', '#4a0f24', 4);
+}
 function drawBridge() {
   ctx.drawImage(IMG.bridge, 0, 0, WW, WH);
-  const t = now();
-  // people (far ones first)
-  const all = [];
-  for (const side of ['L', 'R']) Q[side].forEach((p, i) => { if (p.vis) all.push({ p, side, i }); });
-  all.sort((a, b) => a.p.y - b.p.y);
-  for (const { p, side, i } of all) {
-    const s = scaleAtY(p.y), h = cfg.bridge.charH * s;
+  const t = now(), g = G(), Y = cfg.yard;
+  drawYardPlaque('L'); drawYardPlaque('R');
+  const list = all().filter(p => p.vis && (p.state === 'bridge' || p.state === 'center' || p.state === 'yard'));
+  list.sort((a, b) => a.y - b.y);
+  for (const p of list) {
+    const inYard = p.state === 'yard';
+    const s = inYard ? Y.charH / cfg.bridge.charH : scaleAtY(p.y), h = cfg.bridge.charH * s;
     const bob = p.moving ? Math.abs(Math.sin(t * 9 + p.phase)) * 5 * s : Math.sin(t * 2 + p.phase) * 1.2 * s;
     const tilt = p.moving ? Math.sin(t * 9 + p.phase) * 0.06 : 0;
+    let alpha = 1;
+    if (p.state === 'bridge') { const left = g.idleSec - (t - p.lastLike); if (left < 3) alpha = .45 + .55 * Math.abs(Math.sin(t * 8)); }
     ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(tilt); ctx.translate(-p.x, -p.y);
-    // shadow
     ctx.fillStyle = 'rgba(40,10,20,.28)'; ctx.beginPath(); ctx.ellipse(p.x, p.y, 20 * s, 6 * s, 0, 0, 7); ctx.fill();
-    drawPerson(p, p.x, p.y - bob, h, 'stand', false);
+    drawPerson(p, p.x, p.y - bob, h, 'stand', false, alpha);
     ctx.restore();
-    const stag = (i % 2) && s < .8 ? 16 * s : 0;   // stagger names where people are close together
-    drawNameTag(p, p.x, p.y - h - bob - 10 * s - stag, Math.round(cfg.bridge.nameSize * clamp(s * 1.1, .75, 1.2)));
-    if (i === 0 && p.waitT > 2.5 && !Q[side === 'L' ? 'R' : 'L'][0]) {
-      const by = p.y - h - 46 * s;
+    if (inYard) {
+      txt(fitText(shortName(p.name, 10), 13, 50), p.x, p.y - h - 8, 13, p.coins ? '#ffe066' : '#fff', 'center', '#2a0712', 3.5);
+      continue;
+    }
+    const nameY = p.y - h - bob - 10 * s;
+    drawNameTag(p, p.x, nameY, Math.round(cfg.bridge.nameSize * clamp(s * 1.1, .75, 1.2)));
+    // progress bar (bước chân)
+    const bw = 46, bx = p.x - bw / 2, by = nameY + 12;
+    ctx.fillStyle = 'rgba(40,6,20,.75)'; rrect(bx - 1, by - 1, bw + 2, 7, 3); ctx.fill();
+    ctx.fillStyle = p.state === 'center' ? '#ffd34d' : '#ff6fa0'; rrect(bx, by, bw * clamp(p.steps / g.steps, 0, 1), 5, 2); ctx.fill();
+    // badges
+    const tob = tierObj(p);
+    if (tob && p.state === 'bridge') txt(tob.chain ? '💋x' + tob.chain : '⚡x' + tob.speed, p.x + 34, nameY - 16, 15, '#ffe066', 'center', '#4a0f24', 4);
+    if (p.state === 'bridge') {
+      const left = g.idleSec - (t - p.lastLike);
+      if (left < 5) txt('⏳' + Math.ceil(left) + 's · thả tim!', p.x, nameY - 20, 15, '#ffb0b0', 'center', '#4a0f24', 4);
+      else if (t - p.enterT < 3 && p.steps === 0) txt('❤ thả tim để bước', p.x, nameY - 20, 15, '#ffe0ec', 'center', '#4a0f24', 4);
+    }
+    if (p.state === 'center' && p.cIdx === 0 && !onSide(other(p.side), ['center']).length && !p.chain) {
       ctx.globalAlpha = .9 + Math.sin(t * 4) * .1;
-      txt('Chờ nửa kia 💗', p.x + (side === 'L' ? -20 : 20), by, 16, '#ffe0ec');
+      txt('Chờ nửa kia 💗', p.x + (p.side === 'L' ? -10 : 10), nameY - 20, 16, '#ffe0ec', 'center', '#4a0f24', 4);
       ctx.globalAlpha = 1;
     }
+  }
+  for (const side of ['L', 'R']) {
+    const hidden = onSide(side, ['yard']).length - Y.maxShow;
+    if (hidden > 0) { const R = yardRect(side); txt('+' + hidden + ' người', R.x + R.w - 36, R.y + 16, 15, '#ffe066', 'center', '#4a0f24', 4); }
   }
   if (cfg.bridge.showPath) {
     for (const side of ['L', 'R']) {
@@ -499,38 +619,47 @@ function drawBridge() {
   drawBoards();
 }
 
+function guideVars() {
+  const v = { steps: G().steps, idle: G().idleSec };
+  cfg.tiers.forEach((t, i) => { v['t' + (i + 1)] = t.coins; v['s' + (i + 1)] = t.speed; v['c' + (i + 1)] = t.chain || ''; });
+  return v;
+}
 function drawBoards() {
   const B = cfg.boards;
   for (const side of ['L', 'R']) {
-    const q = Q[side], cx = side === 'L' ? B.leftX : B.rightX;
-    const rows = B.rows;
-    const showN = q.length > rows ? rows - 1 : rows;
-    for (let i = 0; i < Math.min(showN, q.length); i++) {
+    const cx = side === 'L' ? B.leftX : B.rightX, x0 = cx - B.rowW / 2;
+    const q = onSide(side, ['center', 'bridge']).sort((a, b) => (b.state === 'center') - (a.state === 'center') || (a.arriveSeq - b.arriveSeq) || (b.steps - a.steps));
+    const nYard = onSide(side, ['yard']).length;
+    const showN = Math.min(q.length, B.rows - 1);
+    for (let i = 0; i < showN; i++) {
       const p = q[i], y = B.firstRowY + i * B.rowH;
       const col = p.tier ? ['#ff9ec4', '#8fd0ff', '#ff8a8a', '#ffd34d'][(p.tier - 1) % 4] : '#fff6e0';
-      txt(String(i + 1), cx - B.rowW / 2 + 14, y, B.fontSize * .9, '#ffd36b', 'center', '#2a0712');
-      const nm = fitText((p.tier ? '💎' : '') + p.name, B.fontSize, B.rowW - 40);
-      txt(nm, cx - B.rowW / 2 + 30, y, B.fontSize, col, 'left', '#2a0712');
+      txt(String(i + 1), x0 + 14, y, B.fontSize * .9, '#ffd36b', 'center', '#2a0712');
+      txt(fitText(p.name, B.fontSize, B.rowW - 82), x0 + 30, y, B.fontSize, col, 'left', '#2a0712');
+      const st = p.state === 'center' ? '💗' : Math.floor(p.steps) + '';
+      txt(st, x0 + B.rowW - 8, y, B.fontSize * .85, p.state === 'center' ? '#ff9ec4' : '#bfe9ff', 'right', '#2a0712');
     }
-    if (q.length > rows) txt('+' + (q.length - showN) + ' người nữa…', cx, B.firstRowY + (rows - 1) * B.rowH, B.fontSize * .9, '#ffd36b');
-    if (!q.length) txt('Đang trống', cx, B.firstRowY, B.fontSize * .9, 'rgba(255,240,220,.55)', 'center', null);
+    if (!q.length) txt('Cầu đang trống', cx, B.firstRowY, B.fontSize * .9, 'rgba(255,240,220,.6)', 'center', null);
+    const more = q.length - showN;
+    const ly = B.firstRowY + (B.rows - 1) * B.rowH;
+    txt(fitText('🏖 Sân chờ: ' + nYard + (more > 0 ? ' · +' + more + ' trên cầu' : ''), B.fontSize * .85, B.rowW - 10), cx, ly, B.fontSize * .85, '#ffd36b');
   }
   // guide (center board) — cover the baked text and draw ours
   ctx.fillStyle = '#5a1530';
   rrect(324, 1380, 297, 214, 10); ctx.fill();
   if (B.guideTitle) { ctx.fillStyle = '#5a1530'; rrect(340, 1308, 262, 70, 8); ctx.fill(); txt(B.guideTitle, 471, 1342, 30, '#ffd36b'); }
-  const T = cfg.tiers, vars = {};
-  T.forEach((t, i) => vars['t' + (i + 1)] = t.coins);
+  const vars = guideVars();
   const lines = (B.guideLines || []).map(l => tpl(l, vars));
   const n = lines.length || 1, h = 206 / n;
   lines.forEach((l, i) => {
     const y = 1385 + h * i + h / 2;
     if (i) { ctx.fillStyle = 'rgba(255,190,120,.18)'; ctx.fillRect(338, y - h / 2, 270, 2); }
-    ctx.fillStyle = '#ffcf3d'; ctx.beginPath(); ctx.arc(347, y, 12, 0, 7); ctx.fill();
+    const r = Math.min(12, h * .36);
+    ctx.fillStyle = '#ffcf3d'; ctx.beginPath(); ctx.arc(347, y, r, 0, 7); ctx.fill();
     ctx.lineWidth = 2; ctx.strokeStyle = '#7a3a00'; ctx.stroke();
-    txt(String(i + 1), 347, y + 1, 17, '#5a1530', 'center', null);
-    let fsz = 19; ctx.font = '800 ' + fsz + 'px B2, sans-serif';
-    while (fsz > 13 && ctx.measureText(l).width > 252) { fsz--; ctx.font = '800 ' + fsz + 'px B2, sans-serif'; }
+    txt(String(i + 1), 347, y + 1, r * 1.4, '#5a1530', 'center', null);
+    let fsz = Math.min(19, Math.floor(h * .55)); ctx.font = '800 ' + fsz + 'px B2, sans-serif';
+    while (fsz > 12 && ctx.measureText(l).width > 252) { fsz--; ctx.font = '800 ' + fsz + 'px B2, sans-serif'; }
     txt(fitText(l, fsz, 252), 366, y + 1, fsz, '#fff3dc', 'left', '#2a0712', 3);
   });
 }
@@ -538,17 +667,23 @@ function drawBoards() {
 // ---------------------------------------------------------------- kiss scene
 // Kiss scene plays in a framed panel over the top of the screen; the bridge + queues keep running below.
 let panelA = 0, panelTo = 0;
-function startKiss(a, b) {
+function startKiss(owner, partners) {
   sfx('whoosh');
-  for (let i = 0; i < 14; i++) spawnHeart((a.x + b.x) / 2, (a.y + b.y) / 2 - 30, true);
-  Q.L = Q.L.filter(p => p !== a); Q.R = Q.R.filter(p => p !== b);
-  a.side = 'L'; b.side = 'R';
-  pair = { a, b, tier: Math.max(a.tier, b.tier), t: 0, phase: 'approach' };
+  const first = partners[0];
+  for (let i = 0; i < 14; i++) spawnHeart((owner.x + first.x) / 2, (owner.y + first.y) / 2 - 30, true);
+  [owner, ...partners].forEach(p => { p.state = 'kiss'; p.dash = false; });
+  const a = owner.side === 'L' ? owner : first, b = owner.side === 'L' ? first : owner;
+  const chain = partners.length > 1 || owner.chain > 0;
+  pair = { a, b, owner, partnerKey: owner.side === 'L' ? 'b' : 'a', queue: partners.slice(1), idx: 1, total: chain ? partners.length : 1,
+    chain, tier: Math.max(a.tier, b.tier), t: 0, phase: 'approach' };
+  if (chain) owner.chain = 0;
   scene = 'kiss'; panelTo = 1;
 }
 function endKiss() {
   if (!pair) return;
-  done.set(pair.a.id, Date.now()); done.set(pair.b.id, Date.now());
+  toYard(pair.a, 'kiss'); toYard(pair.b, 'kiss');
+  pair.queue.forEach(p => toYard(p, 'kiss'));
+  pair.queue = [];
   pair.phase = 'out'; panelTo = 0;
 }
 function updPanel(dt) {
@@ -590,7 +725,8 @@ function drawKissPanel() {
   [[PN.x, PN.y], [PN.x + PN.w, PN.y], [PN.x, PN.y + PN.h], [PN.x + PN.w, PN.y + PN.h]].forEach(([x, y], i) => drawPixelHeart(x, y, 5 + Math.sin(t * 4 + i) * .6, '#ff3b6b'));
   // ribbon title
   const tier = pair && pair.tier && cfg.tiers[pair.tier - 1];
-  const title = pair && (pair.phase === 'showcase' || (pair.phase === 'out' && tier)) && tier ? '🎉 ' + tier.label + ' 🎉' : (K.panelTitle || '💋 Nụ hôn trên cầu 💋');
+  const title = pair && (pair.phase === 'showcase' || (pair.phase === 'out' && tier)) && tier ? '🎉 ' + tier.label + ' 🎉'
+    : pair && pair.chain ? '💋 Hôn liền ' + pair.idx + '/' + pair.total + ' 💋' : (K.panelTitle || '💋 Nụ hôn trên cầu 💋');
   ctx.font = '800 34px B2, sans-serif';
   const tw = Math.min(PN.w - 80, ctx.measureText(title).width + 70), ty = PN.y + 2;
   ctx.fillStyle = '#4a0f24'; rrect(cx - tw / 2 - 4, ty - 30, tw + 8, 60, 30); ctx.fill();
@@ -622,11 +758,21 @@ function updKiss(dt) {
     const la = kissLayout(P.a, 'L');
     for (let i = 0; i < 10; i++) spawnHeart(WW / 2, la.lipY, true, true);
     spawnOrbitHearts(WW / 2, la.lipY + 120, K.hearts);
-    say(tpl(cfg.voice.congratsTpl, { a: speakName(P.a.name), b: speakName(P.b.name) }), 'congrats');
+    if (!P.chain || P.idx === 1) say(tpl(cfg.voice.congratsTpl, { a: speakName(P.a.name), b: speakName(P.b.name) }), 'congrats');
   } else if (P.phase === 'kiss') {
     if (P.t > 1.6 && !P.k2) { P.k2 = true; sfx('kiss'); }
     if (Math.random() < dt * 3) { const la = kissLayout(P.a, 'L'); spawnHeart(WW / 2 + rand(-30, 30), la.lipY - 20, false, Math.random() < .3); }
-    if (P.t >= T.kissSec) {
+    if (P.t >= (P.chain ? (T.chainKissSec || 3) : T.kissSec)) {
+      if (P.queue.length) {                                   // hôn liền: đổi người tiếp theo
+        const done1 = P[P.partnerKey];
+        toYard(done1, 'kiss'); kissCount++;
+        P[P.partnerKey] = P.queue.shift();
+        P.idx++; P.phase = 'approach'; P.t = 0; P.k2 = false; P.ownerFixed = true;
+        P.tier = Math.max(P.a.tier, P.b.tier, P.tier);
+        for (let i = hearts.length - 1; i >= 0; i--) if (hearts[i].orbit) hearts.splice(i, 1);
+        sfx('whoosh'); heartLayer = false; return;
+      }
+      kissCount++;
       const tier = cfg.tiers[P.tier - 1];
       if (P.tier && tier) {
         P.phase = 'showcase'; P.t = 0; sfx('fanfare');
@@ -656,8 +802,9 @@ function drawKiss() {
     for (const [p, side] of [[P.a, 'L'], [P.b, 'R']]) {
       const lay = kissLayout(p, side);
       const sx = side === 'L' ? K.leftStartX : K.rightStartX;
-      const x = lerp(sx, lay.feetX, k);
-      const bob = k < 1 ? Math.abs(Math.sin(t * 9)) * 10 : 0;
+      const fixed = P.ownerFixed && p === P.owner;
+      const x = fixed ? lay.feetX : lerp(sx, lay.feetX, k);
+      const bob = k < 1 && !fixed ? Math.abs(Math.sin(t * 9)) * 10 : 0;
       ctx.fillStyle = 'rgba(40,10,20,.25)'; ctx.beginPath(); ctx.ellipse(x, K.feetY, 70, 14, 0, 0, 7); ctx.fill();
       drawPerson(p, x, K.feetY - bob, K.charH * 0.95, 'stand', false);
       drawNameTag(p, x, K.feetY - K.charH - 30, 30);
@@ -793,20 +940,31 @@ function frame() {
   if (persistT > 3) { persistT = 0; persist(); }
   requestAnimationFrame(frame);
 }
-const lite = p => ({ id: p.id, name: p.name, avatar: p.avatar, coins: p.coins, tier: p.tier, char: p.char });
+const lite = p => ({ id: p.id, name: p.name, avatar: p.avatar, coins: p.coins, tier: p.tier, char: p.char, side: p.side, state: p.state, steps: Math.floor(p.steps), chain: p.chain });
 function pushState() {
-  API.sendState({ scene, phase: pair && pair.phase, pair: pair ? [lite(pair.a), lite(pair.b)] : null, L: Q.L.map(lite), R: Q.R.map(lite), done: done.size, voiceQ: voiceQ.length });
+  const ls = s => all().filter(p => p.side === s && p.state !== 'kiss')
+    .sort((a, b) => ({ center: 0, bridge: 1, yard: 2 }[a.state] - { center: 0, bridge: 1, yard: 2 }[b.state]) || (a.arriveSeq - b.arriveSeq) || (b.steps - a.steps) || (b.active - a.active)).map(lite);
+  const cnt = st => all().filter(p => p.state === st).length;
+  API.sendState({ scene, phase: pair && pair.phase, pair: pair ? [lite(pair.a), lite(pair.b)] : null, chain: pair && pair.chain ? [pair.idx, pair.total] : null,
+    L: ls('L'), R: ls('R'), counts: { yard: cnt('yard'), bridge: cnt('bridge'), center: cnt('center') }, done: kissCount, voiceQ: voiceQ.length, autoLike: !!autoLikeTimer });
 }
+let kissCount = 0;
 function persist() {
-  API.persistState({ L: Q.L.map(lite), R: Q.R.map(lite), pair: pair ? [lite(pair.a), lite(pair.b)] : null, done: [...done.entries()].filter(([, t]) => Date.now() - t < 3600e3), seq });
+  API.persistState({ v: 2, people: all().map(p => ({ ...lite(p), active: p.active })), followed: [...followed].slice(-5000), seq, kissCount });
 }
 function restore(st) {
-  if (!st) return;
-  const mk = (o, side) => { const p = newPerson(o); p.char = o.char ?? p.char; p.coins = o.coins || 0; p.tier = tierFor(p.coins); p.side = side; if (p.coins) p.donorSeq = p.seq; return p; };
-  Q.L = (st.L || []).map(o => mk(o, 'L')); Q.R = (st.R || []).map(o => mk(o, 'R'));
-  if (st.pair) { Q.L.unshift(mk(st.pair[0], 'L')); Q.R.unshift(mk(st.pair[1], 'R')); }
-  (st.done || []).forEach(([k, v]) => done.set(k, v));
-  seq = Math.max(seq, st.seq || 0);
+  if (!st || st.v !== 2) return;            // old queue format → start fresh
+  for (const o of st.people || []) {
+    const p = newPerson(o);
+    Object.assign(p, { char: o.char ?? p.char, coins: o.coins || 0, side: o.side, chain: o.chain || 0, active: o.active || Date.now() });
+    p.tier = tierFor(p.coins);
+    p.state = o.state === 'kiss' ? 'center' : (o.state || 'yard');
+    if (p.state === 'bridge') { p.steps = o.steps || 0; p.lastLike = now(); p.d = p.steps * stepLen(p.side); p.enterT = -9; }
+    if (p.state === 'center') { p.steps = G().steps; p.arriveSeq = ++seq; p.arriveT = now(); p.d = PATH[p.side].len; }
+    PEOPLE.set(p.id, p);
+  }
+  (st.followed || []).forEach(id => followed.add(id));
+  seq = Math.max(seq, st.seq || 0); kissCount = st.kissCount || 0;
 }
 
 // ---------------------------------------------------------------- panel commands
@@ -818,43 +976,94 @@ function fakeAvatar(n) {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 function fakeUser() { fakeN++; const n = FAKE[(Math.random() * FAKE.length) | 0] + ' ' + fakeN; return { id: 'test_' + fakeN + '_' + Date.now(), name: n, avatar: fakeAvatar(n) }; }
+const pick = arr => arr[(Math.random() * arr.length) | 0];
+const asUser = p => ({ id: p.id, name: p.name, avatar: p.avatar });
+function fakeLikes(n) {
+  const b = all().filter(p => p.state === 'bridge');
+  for (let i = 0; i < n && b.length; i++) handleEvent({ type: 'like', user: asUser(pick(b)), count: 1 + ((Math.random() * 3) | 0) });
+}
 function handleCmd(c) {
   switch (c.type) {
     case 'fake': for (let i = 0; i < (c.n || 1); i++) setTimeout(() => handleEvent({ type: 'join', user: fakeUser() }), i * 120); break;
-    case 'fakeChat': { const u = fakeUser(); handleEvent({ type: 'chat', user: u, text: c.text || 'Cho mình lên cầu với 😍' }); break; }
+    case 'fakeChat': {
+      for (let i = 0; i < (c.n || 1); i++) {
+        const y = all().filter(p => p.state === 'yard');
+        const u = y.length ? asUser(pick(y)) : fakeUser();
+        handleEvent({ type: 'chat', user: u, text: c.text || pick(['Cho mình lên cầu với 😍', 'Đẹp quá', 'Lên cầu nào!', 'Ai ghép với mình đi', 'Phú Quốc đỉnh quá']) });
+      }
+      break;
+    }
+    case 'fakeFollow': { const y = all().filter(p => p.state === 'yard'); handleEvent({ type: 'follow', user: y.length ? asUser(pick(y)) : fakeUser() }); break; }
+    case 'fakeShare': { const y = all().filter(p => p.state === 'yard'); handleEvent({ type: 'share', user: y.length ? asUser(pick(y)) : fakeUser() }); break; }
+    case 'fakeLike': fakeLikes(c.n || 10); break;
+    case 'autoLike':
+      if (autoLikeTimer) { clearInterval(autoLikeTimer); autoLikeTimer = null; }
+      else autoLikeTimer = setInterval(() => fakeLikes(1), c.ms || 220);
+      break;
     case 'fakeGift': {
-      const q = [...Q.L, ...Q.R];
-      const u = c.toExisting && q.length ? q[q.length - 1] : fakeUser();
-      handleEvent({ type: 'gift', user: { id: u.id, name: u.name, avatar: u.avatar }, coins: c.coins || 1, gift: c.coins >= 99 ? 'Nhẫn cưới' : c.coins >= 30 ? 'Bó hoa' : c.coins >= 10 ? 'Kẹo bông' : 'Hoa hồng', count: 1 });
+      const b = all().filter(p => p.state === 'bridge' || p.state === 'center');
+      const u = c.toExisting && b.length ? asUser(pick(b)) : fakeUser();
+      handleEvent({ type: 'gift', user: u, coins: c.coins || 1, gift: c.coins >= 100 ? 'Nhẫn cưới' : c.coins >= 10 ? 'Bó hoa' : c.coins >= 5 ? 'Kẹo bông' : 'Hoa hồng', count: 1 });
       break;
     }
     case 'remove': removeId(c.id); break;
-    case 'promote': { const f = findPerson(c.id); if (f && f.side !== 'pair') { Q[f.side].splice(f.i, 1); Q[f.side].unshift(f.p); } break; }
-    case 'move': { const f = findPerson(c.id); if (f && f.side !== 'pair') { Q[f.side].splice(f.i, 1); const s = f.side === 'L' ? 'R' : 'L'; f.p.side = s; f.p.d = 0; Q[s].push(f.p); } break; }
-    case 'clear': Q.L = []; Q.R = []; break;
-    case 'clearDone': done.clear(); break;
+    case 'promote': { const p = PEOPLE.get(c.id); if (!p) break; if (p.state === 'yard') toBridge(p); else if (p.state === 'bridge') { p.lastLike = now(); arrive(p); } break; }
+    case 'move': { const p = PEOPLE.get(c.id); if (p && (p.state === 'yard' || p.state === 'bridge')) { toYard(p); p.side = other(p.side); p.active = Date.now(); } break; }
+    case 'clear': all().forEach(p => { if (p.state === 'bridge' || p.state === 'center') toYard(p); }); break;
+    case 'clearAll': all().forEach(p => { if (p.state !== 'kiss') PEOPLE.delete(p.id); }); break;
+    case 'clearDone': followed.clear(); break;
     case 'skip': if (pair && pair.phase !== 'out') endKiss(); break;
-    case 'forcePair': if (scene === 'bridge' && Q.L[0] && Q.R[0]) startKiss(Q.L[0], Q.R[0]); break;
+    case 'forcePair': {
+      if (pair) break;
+      const top = s => pickPartners(s, 1)[0];
+      const a = top('L'), b = top('R');
+      if (a && b) { a.state = 'center'; b.state = 'center'; startKiss(a, [b]); }
+      break;
+    }
     case 'say': say(c.text, 'congrats'); break;
     case 'sfx': sfx(c.name); break;
     case 'event': handleEvent(c.ev); break;
-    case 'testKiss': { // full demo with fake donors
-      const a = fakeUser(), b = fakeUser();
-      handleEvent({ type: 'gift', user: a, coins: c.coins || 0 || 1, gift: 'Hoa hồng', count: 1 });
-      handleEvent({ type: 'gift', user: b, coins: 1, gift: 'Hoa hồng', count: 1 });
-      break;
-    }
   }
 }
+
+// one-time settings migration for the new rules (runs inside hot-updated content, no new exe needed)
+const NEW_RULES = {
+  schema: 2,
+  game: { steps: 100, idleSec: 10, maxYard: 200 },
+  yard: { charH: 70, maxShow: 10, rowGap: 58, L: { x: 6, y: 1132, w: 296, h: 158 }, R: { x: 639, y: 1132, w: 296, h: 158 } },
+  tiers: [
+    { coins: 1, speed: 1.5, chain: 0, frame: 'frame1.png', label: 'Khung Tim Hồng' },
+    { coins: 5, speed: 2, chain: 0, frame: 'frame2.png', label: 'Khung Kim Cương Xanh' },
+    { coins: 10, speed: 3, chain: 0, frame: 'frame3.png', label: 'Khung Hoàng Gia' },
+    { coins: 100, speed: 3, chain: 5, frame: 'frame4.png', label: 'Cổng Cưới' }
+  ],
+  timing: { walkSpeed: 120, slotSpacing: 40, chainKissSec: 3 },
+  bridge: { rightPath: [[786, 1100], [822, 1055], [870, 1015], [903, 976], [914, 946], [888, 928], [820, 912], [720, 899], [620, 892], [540, 889], [490, 890]],
+    leftPath: [[170, 1105], [142, 1070], [95, 1040], [52, 1005], [36, 966], [62, 942], [130, 928], [220, 914], [320, 902], [410, 894], [452, 890]] },
+  boards: { guideLines: [
+    'Vào live → đứng ở sân chờ',
+    'Bình luận / Follow / Share để lên cầu',
+    'Thả tim: 1 tim = 1 bước · {steps} bước',
+    '{idle}s không thả tim sẽ rời cầu',
+    'Tặng {t1}xu x{s1} · {t2}xu x{s2} · {t3}xu x{s3}',
+    '{t4} xu: hôn liền {c4} người 💋'
+  ] },
+  voice: {
+    welcomeTpl: 'Chào mừng {name}! Bình luận để lên cầu, thả tim để bước tới nhé',
+    giftTpl: 'Cảm ơn {name} đã tặng {gift}! Tốc độ tăng gấp {speed} lần.',
+    chainTpl: 'Wow! Cảm ơn {name} đã tặng {gift}! {name} được hôn liền {n} người!'
+  }
+};
 
 // ---------------------------------------------------------------- boot
 (async function boot() {
   cfg = await API.getSettings();
+  if ((cfg.schema || 0) < 2) { cfg = await API.setSettings(NEW_RULES); log('Đã chuyển sang luật chơi mới (sân chờ + thả tim)'); }
   rebuildPaths();
   await Promise.all(['800 20px B2', '20px PX'].map(f => document.fonts.load(f, 'Aàáạ')));
   await loadAssets();
   restore(await API.restoreState());
-  API.onSettings(s => { cfg = s; rebuildPaths(); Q.L.concat(Q.R).forEach(p => p.tier = tierFor(p.coins)); applyMusic(); });
+  API.onSettings(s => { cfg = s; rebuildPaths(); all().forEach(p => p.tier = tierFor(p.coins)); applyMusic(); });
   API.onLiveEvent(handleEvent);
   API.onCmd(handleCmd);
   applyMusic();
