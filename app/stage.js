@@ -285,7 +285,13 @@ function onEngage(user, kind) {
 }
 function onLike(user, count) {
   const p = ensurePerson(user, true);
-  if (p && p.state === 'bridge') addSteps(p, Math.max(1, count || 1));
+  if (!p || p.state !== 'bridge') return;
+  const n = Math.max(1, count || 1);
+  addSteps(p, n);
+  if (!p.likeFx) p.likeFx = [];
+  const add = Math.min(n, 5), gain = Math.round(n * speedOf(p) * 10) / 10;
+  for (let i = 0; i < add; i++) p.likeFx.push({ t: -i * .12, dx: rand(-6, 8), col: HCOLORS[(Math.random() * HCOLORS.length) | 0], label: i === 0 ? '+' + gain : '' });
+  if (p.likeFx.length > 24) p.likeFx.splice(0, p.likeFx.length - 24);
 }
 function onGift(user, coins, giftName, count) {
   const p = ensurePerson(user, true);
@@ -528,6 +534,7 @@ function updYard(dt) {
 }
 function updBridge(dt) {
   const T = cfg.timing, g = G(), tnow = now(), fly = cfg.yard.flySec;
+  for (const p of PEOPLE.values()) if (p.likeFx && p.likeFx.length) { p.likeFx.forEach(f => f.t += dt); p.likeFx = p.likeFx.filter(f => f.t < 1.2); }
   for (const side of ['L', 'R']) {
     const len = PATH[side].len, stepPx = stepLen(side);
     const centers = onSide(side, ['center']).sort((a, b) => a.arriveSeq - b.arriveSeq);
@@ -591,15 +598,47 @@ function drawPerson(p, x, y, h, pose, flip, alpha = 1) {
   return { top: y - h, s };
 }
 const TIER_COL = ['#ff6fa0', '#3aa0ff', '#e8343c', '#f5b400'];
-function drawNameTag(p, x, y, size) {
-  const name = fitText(shortName(p.name, 16), size, 220);
+const AV_COL = ['#ff6fa0', '#5ab0ff', '#ffb347', '#7ed957', '#c58cff', '#ff7b7b'];
+function drawAvatar(p, x, y, r) {
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, r + Math.max(1.5, r * .16), 0, 7);
+  ctx.fillStyle = p.tier ? TIER_COL[(p.tier - 1) % 4] : '#fff6e8'; ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.closePath();
+  if (p.avatarImg) {
+    ctx.clip();
+    const im = p.avatarImg, k = Math.max(2 * r / im.width, 2 * r / im.height);
+    ctx.drawImage(im, x - im.width * k / 2, y - im.height * k / 2, im.width * k, im.height * k);
+  } else {
+    let h = 0; for (const c of String(p.id)) h = (h * 31 + c.charCodeAt(0)) | 0;
+    ctx.fillStyle = AV_COL[Math.abs(h) % AV_COL.length]; ctx.fill();
+    txt((String(p.name).trim()[0] || '?').toUpperCase(), x, y + 1, r * 1.15, '#fff', 'center', null);
+  }
+  ctx.restore();
+}
+// name with avatar on the left; returns the right edge (for like-hearts)
+function drawNameTag(p, x, y, size, opts = {}) {
+  const name = fitText(shortName(p.name, opts.max || 16), size, opts.maxW || 220);
+  ctx.font = '800 ' + size + 'px B2, sans-serif';
+  const nw = ctx.measureText(name).width, r = size * .78, gap = size * .3, pad = p.tier ? size * .55 : 0;
+  const total = 2 * r + gap + pad * 2 + nw, left = x - total / 2, nx = left + 2 * r + gap + pad;
   if (p.tier) {
-    ctx.font = '800 ' + size + 'px B2, sans-serif'; const w = ctx.measureText(name).width + size * 1.4;
-    rrect(x - w / 2, y - size * .75, w, size * 1.5, size * .5);
+    rrect(nx - pad, y - size * .72, nw + pad * 2, size * 1.44, size * .5);
     ctx.fillStyle = TIER_COL[(p.tier - 1) % 4]; ctx.fill();
     ctx.lineWidth = 2; ctx.strokeStyle = '#fff3c4'; ctx.stroke();
-    txt(name, x, y + 1, size, '#fff', 'center', '#2a0712', size * .18);
-  } else txt(name, x, y, size, '#fff', 'center', '#2a0712');
+  }
+  drawAvatar(p, left + r, y, r);
+  txt(name, nx, y + 1, size, opts.color || '#fff', 'left', '#2a0712', p.tier ? size * .18 : Math.max(3, size * .22));
+  return left + total;
+}
+function drawLikeFx(p, rx, y, s) {
+  if (!p.likeFx || !p.likeFx.length) return;
+  for (const f of p.likeFx) {
+    if (f.t < 0) continue;
+    const k = f.t / 1.2, a = k < .15 ? k / .15 : 1 - (k - .15) / .85;
+    const hx = rx + 10 + f.dx + Math.sin(f.t * 7 + f.dx) * 4, hy = y - k * 55 * s;
+    drawPixelHeart(hx, hy, (2.4 + (1 - k) * .9) * clamp(s * 1.2, .8, 1.3), f.col, clamp(a, 0, 1));
+    if (f.label && k < .8) txt(f.label, hx + 16, hy - 4, 13, '#ffd6e4', 'left', '#4a0f24', 3.5);
+  }
 }
 function drawBridge() {
   ctx.drawImage(IMG.bridge, 0, 0, WW, WH);
@@ -626,10 +665,12 @@ function drawBridge() {
     const nameY = fy - h - 10 * s;
     if (inYard) {
       const fs = Math.round(clamp(14 * s * 1.25, 12, 18));
-      txt(fitText(shortName(p.name, 12), fs, 95), p.x, nameY + 2, fs, p.coins ? '#ffe066' : '#fff', 'center', '#2a0712', 3.5);
+      drawNameTag(p, p.x, nameY + 2, fs, { max: 12, maxW: 90, color: p.coins ? '#ffe066' : '#fff' });
       continue;
     }
-    drawNameTag(p, p.x, nameY, Math.round(cfg.bridge.nameSize * clamp(s * 1.1, .7, 1.2)));
+    const nsz = Math.round(cfg.bridge.nameSize * clamp(s * 1.1, .7, 1.2));
+    const nameRight = drawNameTag(p, p.x, nameY, nsz);
+    drawLikeFx(p, nameRight, nameY, s);
     if (fl) continue;
     const bw = 46, bx = p.x - bw / 2, by = nameY + 12;
     ctx.fillStyle = 'rgba(40,6,20,.75)'; rrect(bx - 1, by - 1, bw + 2, 7, 3); ctx.fill();
@@ -806,6 +847,15 @@ function drawSparkle(x, y, r, a) {
   ctx.fillRect(x - r, y - 1.5, r * 2, 3); ctx.fillRect(x - 1.5, y - r, 3, r * 2);
   ctx.fillStyle = '#ffd34d'; ctx.fillRect(x - 3, y - 3, 6, 6); ctx.globalAlpha = 1;
 }
+function drawPairNames(P, y, w) {
+  const t = now();
+  ctx.fillStyle = 'rgba(60,8,30,.58)'; rrect(WW / 2 - w / 2, y - 32, w, 64, 32); ctx.fill();
+  const r = 22;
+  drawAvatar(P.a, WW / 2 - w / 2 + 34, y, r); drawAvatar(P.b, WW / 2 + w / 2 - 34, y, r);
+  txt(fitText(shortName(P.a.name, 16), 32, w / 2 - 110), WW / 2 - 34, y, 32, '#fff', 'right');
+  txt(fitText(shortName(P.b.name, 16), 32, w / 2 - 110), WW / 2 + 34, y, 32, '#fff', 'left');
+  drawPixelHeart(WW / 2, y, 5 + Math.sin(t * 6), '#ff3b6b');
+}
 function drawKiss() {
   ctx.drawImage(IMG.kiss, 0, 0, WW, WH);
   if (!pair) return;
@@ -832,11 +882,7 @@ function drawKiss() {
       drawPerson(p, lay.feetX + off, K.feetY, K.charH, 'kiss', side === 'R');
     }
     // names
-    const y = K.feetY + 28;
-    ctx.fillStyle = 'rgba(60,8,30,.55)'; rrect(WW / 2 - 330, y - 30, 660, 60, 30); ctx.fill();
-    txt(fitText(shortName(P.a.name, 16), 34, 270), WW / 2 - 40, y, 34, '#fff', 'right');
-    txt(fitText(shortName(P.b.name, 16), 34, 270), WW / 2 + 40, y, 34, '#fff', 'left');
-    drawPixelHeart(WW / 2, y, 5 + Math.sin(t * 6), '#ff3b6b');
+    drawPairNames(P, K.feetY + 28, 720);
   } else if (P.phase === 'showcase' || P.phase === 'out') {
     const tier = cfg.tiers[P.tier - 1], fr = tier && IMG.frames[tier.frame];
     // frame flies in from the top, settles behind them
@@ -862,11 +908,7 @@ function drawKiss() {
       ctx.fillStyle = 'rgba(40,10,20,.25)'; ctx.beginPath(); ctx.ellipse(x, K.showcaseFeetY, 60, 12, 0, 0, 7); ctx.fill();
       drawPerson(p, x, y + Math.sin(t * 3 + x) * 3, H, 'stand', false);
     }
-    const ny = K.showcaseFeetY + 56;
-    ctx.fillStyle = 'rgba(60,8,30,.6)'; rrect(WW / 2 - 340, ny - 30, 680, 60, 30); ctx.fill();
-    txt(fitText(shortName(P.a.name, 16), 34, 270), WW / 2 - 40, ny, 34, '#fff', 'right');
-    txt(fitText(shortName(P.b.name, 16), 34, 270), WW / 2 + 40, ny, 34, '#fff', 'left');
-    drawPixelHeart(WW / 2, ny, 5 + Math.sin(t * 6), '#ff3b6b');
+    drawPairNames(P, K.showcaseFeetY + 56, 740);
     for (const s of sparkles) drawSparkle(s.x, s.y, 10 * Math.sin(s.t / .8 * Math.PI), Math.sin(s.t / .8 * Math.PI));
   }
 }
