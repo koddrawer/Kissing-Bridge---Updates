@@ -215,27 +215,34 @@ function ensurePerson(user, quiet) {
     p.active = Date.now();
     return p;
   }
-  const cL = all().filter(x => x.side === 'L').length, cR = all().filter(x => x.side === 'R').length;
-  const side = cL !== cR ? (cL < cR ? 'L' : 'R') : ((sideToggle++ % 2) ? 'R' : 'L');
-  p = newPerson(user); p.side = side;
+  p = newPerson(user); p.side = null;
   PEOPLE.set(p.id, p);
-  pruneYard(side);
+  pruneYard();
   if (!quiet) {
-    toast('👋 ' + shortName(p.name, 18) + ' vào sân chờ ' + sideName(side), '#ffe7a8', 2.2);
-    if (cfg.voice.welcome) say(tpl(cfg.voice.welcomeTpl, { name: speakName(p.name), side: side === 'L' ? 'trái' : 'phải' }), 'welcome');
+    toast('👋 ' + shortName(p.name, 18) + ' vào sân chờ', '#ffe7a8', 2.2);
+    if (cfg.voice.welcome) say(tpl(cfg.voice.welcomeTpl, { name: speakName(p.name), side: '' }), 'welcome');
     sfx('join');
   }
   return p;
 }
-function pruneYard(side) {
-  const y = onSide(side, ['yard']);
+function pruneYard() {
+  const y = all().filter(p => p.state === 'yard');
   const max = G().maxYard || 200;
   if (y.length <= max) return;
   y.sort((a, b) => a.active - b.active).slice(0, y.length - max).forEach(p => { if (!p.coins) PEOPLE.delete(p.id); });
 }
 
-function toBridge(p, why) {
+// lên cầu luân phiên 2 bên: bên nào ít người hơn thì vào bên đó, bằng nhau thì sang bên kia so với người vừa lên
+let lastSide = 'R';
+function pickSide() {
+  const n = s => onSide(s, ['bridge', 'center']).length;
+  const cL = n('L'), cR = n('R');
+  lastSide = cL < cR ? 'L' : cR < cL ? 'R' : other(lastSide);
+  return lastSide;
+}
+function toBridge(p, why, side) {
   if (!p || p.state !== 'yard') return false;
+  p.side = side || pickSide();
   if (p.wx == null || !p.vis) placeInYard(p);
   p.state = 'bridge'; p.steps = 0; p.d = 0; p.enterT = now(); p.lastLike = now() + cfg.yard.flySec; p.active = Date.now();
   p.fromX = p.x; p.fromY = p.y; p.flyK = 0;
@@ -250,7 +257,7 @@ function toYard(p, reason) {
     toast('⌛ ' + shortName(p.name, 16) + ' rời cầu vì không thả tim', '#ffc2c2', 2.4);
     sfx('poof');
   }
-  p.state = 'yard'; p.steps = 0; p.d = 0; p.dash = false; p.arriveSeq = 0; p.flyK = 1;
+  p.state = 'yard'; p.side = null; p.steps = 0; p.d = 0; p.dash = false; p.arriveSeq = 0; p.flyK = 1;
   placeInYard(p);
   if (reason === 'kiss') { p.coins = 0; p.tier = 0; p.chain = 0; }
 }
@@ -360,7 +367,7 @@ function duckMusic(on) { music.volume = clamp((cfg.music.volume || 0) * (on ? 0.
 function applyMusic() {
   const f = cfg.music.file;
   if (!f) { music.pause(); music.removeAttribute('src'); return; }
-  const url = 'file:///' + f.replace(/\\/g, '/').split('/').map(encodeURIComponent).join('/').replace(/^\/?([A-Za-z])%3A/, '$1:');
+  const url = fileUrl(f);
   if (music.dataset.f !== f) { music.dataset.f = f; music.src = url; }
   duckMusic(false);
   music.play().catch(() => {});
@@ -372,7 +379,7 @@ function tone(freq, t0, dur, type = 'square', vol = .2, slideTo) {
   const a = ac(), o = a.createOscillator(), g = a.createGain();
   o.type = type; o.frequency.setValueAtTime(freq, a.currentTime + t0);
   if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, a.currentTime + t0 + dur);
-  const v = vol * cfg.sfx.volume;
+  const v = vol * cfg.sfx.volume * sfxMul;
   g.gain.setValueAtTime(0.0001, a.currentTime + t0);
   g.gain.exponentialRampToValueAtTime(Math.max(v, 0.0002), a.currentTime + t0 + 0.01);
   g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + t0 + dur);
@@ -383,11 +390,30 @@ function noise(t0, dur, vol = .2, f = 2000) {
   for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
   const s = a.createBufferSource(), flt = a.createBiquadFilter(), g = a.createGain();
   flt.type = 'bandpass'; flt.frequency.value = f; flt.Q.value = 1.2;
-  g.gain.value = vol * cfg.sfx.volume; s.buffer = b; s.connect(flt).connect(g).connect(a.destination); s.start(a.currentTime + t0);
+  g.gain.value = vol * cfg.sfx.volume * sfxMul; s.buffer = b; s.connect(flt).connect(g).connect(a.destination); s.start(a.currentTime + t0);
+}
+// custom sound files (set in the control panel); fall back to the built-in 8-bit sounds
+let sfxMul = 1;
+const sfxCache = {};
+function fileUrl(f) {
+  if (/^(file|https?):/i.test(f)) return f;
+  const p = f.replace(/\\/g, '/').split('/').map(encodeURIComponent).join('/').replace(/^([A-Za-z])%3A/, '$1:');
+  return 'file:///' + p.replace(/^\/+/, '');
+}
+function playFile(name, f, vol) {
+  let a = sfxCache[name];
+  if (!a || a.dataset.f !== f) { a = new Audio(fileUrl(f)); a.dataset.f = f; a.preload = 'auto'; sfxCache[name] = a; }
+  const c = a.cloneNode(); c.volume = clamp(vol, 0, 1);
+  c.play().catch(e => log('Không phát được âm ' + name + ': ' + e.message));
 }
 function sfx(name) {
   try {
     if (!cfg || cfg.sfx.volume <= 0) return;
+    const S = cfg.sfx, mul = (S.vols && S.vols[name] != null) ? S.vols[name] : 1;
+    if (mul <= 0) return;
+    const f = S.files && S.files[name];
+    if (f) { playFile(name, f, S.volume * mul); return; }
+    sfxMul = mul;
     if (name === 'join') { tone(880, 0, .07, 'square', .08); tone(1320, .07, .1, 'square', .08); }
     else if (name === 'gift') { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, i * .07, .16, 'square', .12)); }
     else if (name === 'kiss') {   // 8-bit "mwah ~ chụt"
@@ -403,6 +429,7 @@ function sfx(name) {
     else if (name === 'poof') { noise(0, .25, .2, 700); tone(500, 0, .25, 'square', .06, 150); }
     else if (name === 'arrive') { [784, 988, 1175].forEach((f, i) => tone(f, i * .08, .12, 'square', .08)); }
   } catch {}
+  sfxMul = 1;
 }
 
 // ---------------------------------------------------------------- particles & toasts
@@ -476,7 +503,7 @@ function scaleAtY(y) {
 function yardX(y, side) {               // x range of the plaza at height y, for one side
   const Y = cfg.yard, k = clamp((y - Y.topY) / (Y.bottomY - Y.topY), 0, 1);
   const x0 = lerp(Y.topX0, Y.bottomX0, k), x1 = lerp(Y.topX1, Y.bottomX1, k), mid = (x0 + x1) / 2, gap = Y.midGap / 2;
-  return side === 'L' ? [x0, mid - gap] : [mid + gap, x1];
+  return side === 'L' ? [x0, mid - gap] : side === 'R' ? [mid + gap, x1] : [x0, x1];
 }
 function yardScale(y) { const Y = cfg.yard; return lerp(Y.charTop, Y.charBottom, clamp((y - Y.topY) / (Y.bottomY - Y.topY), 0, 1)) / cfg.bridge.charH; }
 function randYardPoint(side) {
@@ -486,14 +513,14 @@ function randYardPoint(side) {
 function placeInYard(p) { const [x, y] = randYardPoint(p.side); p.x = p.wx = x; p.y = p.wy = y; p.wait = rand(.3, 3); }
 function updYard(dt) {
   const Y = cfg.yard;
-  for (const side of ['L', 'R']) {
-    const list = onSide(side, ['yard']).sort((a, b) => b.active - a.active);
+  {
+    const list = all().filter(p => p.state === 'yard').sort((a, b) => b.active - a.active);
     list.forEach((p, i) => {
       p.vis = i < Y.maxShow;
       if (p.wx == null) placeInYard(p);
       if (p.wait > 0) { p.wait -= dt; p.moving = false; return; }
       const dx = p.wx - p.x, dy = p.wy - p.y, d = Math.hypot(dx, dy);
-      if (d < 2) { p.wait = rand(1, 4.5); const [x, y] = randYardPoint(side); p.wx = x; p.wy = y; p.moving = false; return; }
+      if (d < 2) { p.wait = rand(1, 4.5); const [x, y] = randYardPoint(null); p.wx = x; p.wy = y; p.moving = false; return; }
       const sp = (p.walkSp || (p.walkSp = rand(.75, 1.25) * Y.walkSpeed)) * yardScale(p.y);
       p.x += dx / d * Math.min(d, sp * dt); p.y += dy / d * Math.min(d, sp * dt); p.moving = true;
     });
@@ -533,11 +560,13 @@ function updBridge(dt) {
   if (scene === 'bridge' && !pair) tryPair();
 }
 function readyAtCenter(p) { return p.state === 'center' && now() - p.arriveT >= cfg.timing.waitAtEndSec && Math.abs(p.d - p.tgt) < 3 && (p.flyK ?? 1) >= 1; }
-function pickPartners(side, n) {
+function pickPartners(side, n, exclude = []) {
   const c = onSide(side, ['center']).sort((a, b) => a.arriveSeq - b.arriveSeq);
   const b = onSide(side, ['bridge']).sort((a, b) => b.steps - a.steps);
-  const y = onSide(side, ['yard']).sort((a, b) => b.active - a.active);
-  return [...c, ...b, ...y].slice(0, n);
+  const y = all().filter(p => p.state === 'yard' && !exclude.includes(p)).sort((a, b) => b.active - a.active);
+  const out = [...c, ...b, ...y].filter(p => !exclude.includes(p)).slice(0, n);
+  out.forEach(p => { if (p.state === 'yard') p.side = side; });
+  return out;
 }
 function tryPair() {
   const centers = all().filter(p => p.state === 'center').sort((a, b) => a.arriveSeq - b.arriveSeq);
@@ -619,10 +648,8 @@ function drawBridge() {
     }
   }
   for (const s of sparkles) if (s.w) drawSparkle(s.x, s.y, 8 * Math.sin(s.t / .8 * Math.PI), Math.sin(s.t / .8 * Math.PI));
-  for (const side of ['L', 'R']) {
-    const hidden = onSide(side, ['yard']).length - Y.maxShow;
-    if (hidden > 0) txt('+' + hidden + ' người ở sân chờ', side === 'L' ? Y.bottomX0 + 90 : Y.bottomX1 - 90, Y.bottomY - 8, 16, '#ffe066', 'center', '#4a0f24', 4);
-  }
+  { const hidden = all().filter(p => p.state === 'yard').length - Y.maxShow;
+    if (hidden > 0) txt('+' + hidden + ' người ở sân chờ', WW / 2, Y.bottomY + 10, 18, '#ffe066', 'center', '#4a0f24', 4); }
   if (cfg.bridge.showPath) {
     for (const side of ['L', 'R']) {
       ctx.strokeStyle = side === 'L' ? '#0f0' : '#0ff'; ctx.lineWidth = 3; ctx.beginPath();
@@ -650,13 +677,13 @@ function drawGuide() {
   lines.forEach((l, i) => {
     const y = R.y + h * i + h / 2;
     if (i) { ctx.fillStyle = 'rgba(255,190,120,.18)'; ctx.fillRect(R.x + 6, y - h / 2, R.w - 12, 1.5); }
-    const r = Math.min(10, h * .34), cx = R.x + 13;
+    const r = Math.min(14, h * .34), cx = R.x + r + 4;
     ctx.fillStyle = '#ffcf3d'; ctx.beginPath(); ctx.arc(cx, y, r, 0, 7); ctx.fill();
     ctx.lineWidth = 1.5; ctx.strokeStyle = '#7a3a00'; ctx.stroke();
     txt(String(i + 1), cx, y + 1, r * 1.4, '#5a1530', 'center', null);
-    let fsz = Math.min(17, Math.floor(h * .58)); ctx.font = '800 ' + fsz + 'px B2, sans-serif';
-    while (fsz > 10 && ctx.measureText(l).width > tw) { fsz--; ctx.font = '800 ' + fsz + 'px B2, sans-serif'; }
-    txt(fitText(l, fsz, tw), R.x + 28, y + 1, fsz, '#fff3dc', 'left', '#2a0712', 3);
+    let fsz = Math.min(24, Math.floor(h * .56)); ctx.font = '800 ' + fsz + 'px B2, sans-serif';
+    while (fsz > 10 && ctx.measureText(l).width > R.w - r * 2 - 18) { fsz--; ctx.font = '800 ' + fsz + 'px B2, sans-serif'; }
+    txt(fitText(l, fsz, R.w - r * 2 - 18), R.x + r * 2 + 12, y + 1, fsz, '#fff3dc', 'left', '#2a0712', 3);
   });
 }
 
@@ -932,11 +959,11 @@ function frame() {
 }
 const lite = p => ({ id: p.id, name: p.name, avatar: p.avatar, coins: p.coins, tier: p.tier, char: p.char, side: p.side, state: p.state, steps: Math.floor(p.steps), chain: p.chain });
 function pushState() {
-  const ls = s => all().filter(p => p.side === s && p.state !== 'kiss')
+  const ls = s => all().filter(p => (s === 'Y' ? p.state === 'yard' : p.side === s && p.state !== 'kiss' && p.state !== 'yard'))
     .sort((a, b) => ({ center: 0, bridge: 1, yard: 2 }[a.state] - { center: 0, bridge: 1, yard: 2 }[b.state]) || (a.arriveSeq - b.arriveSeq) || (b.steps - a.steps) || (b.active - a.active)).map(lite);
   const cnt = st => all().filter(p => p.state === st).length;
   API.sendState({ scene, phase: pair && pair.phase, pair: pair ? [lite(pair.a), lite(pair.b)] : null, chain: pair && pair.chain ? [pair.idx, pair.total] : null,
-    L: ls('L'), R: ls('R'), counts: { yard: cnt('yard'), bridge: cnt('bridge'), center: cnt('center') }, done: kissCount, voiceQ: voiceQ.length, autoLike: !!autoLikeTimer });
+    L: ls('L'), R: ls('R'), Y: ls('Y').slice(0, 150), counts: { yard: cnt('yard'), bridge: cnt('bridge'), center: cnt('center') }, done: kissCount, voiceQ: voiceQ.length, autoLike: !!autoLikeTimer });
 }
 let kissCount = 0;
 function persist() {
@@ -949,6 +976,7 @@ function restore(st) {
     Object.assign(p, { char: o.char ?? p.char, coins: o.coins || 0, side: o.side, chain: o.chain || 0, active: o.active || Date.now() });
     p.tier = tierFor(p.coins);
     p.state = o.state === 'kiss' ? 'center' : (o.state || 'yard');
+    if (p.state === 'yard') p.side = null; else if (!p.side) p.side = pickSide();
     if (p.state === 'bridge') { p.steps = o.steps || 0; p.lastLike = now(); p.d = p.steps * stepLen(p.side); p.enterT = -9; }
     if (p.state === 'center') { p.steps = G().steps; p.arriveSeq = ++seq; p.arriveT = now(); p.d = PATH[p.side].len; }
     PEOPLE.set(p.id, p);
@@ -998,15 +1026,14 @@ function handleCmd(c) {
     }
     case 'remove': removeId(c.id); break;
     case 'promote': { const p = PEOPLE.get(c.id); if (!p) break; if (p.state === 'yard') toBridge(p); else if (p.state === 'bridge') { p.lastLike = now(); arrive(p); } break; }
-    case 'move': { const p = PEOPLE.get(c.id); if (p && (p.state === 'yard' || p.state === 'bridge')) { toYard(p); p.side = other(p.side); p.active = Date.now(); } break; }
+    case 'move': { const p = PEOPLE.get(c.id); if (p && p.state === 'bridge') { p.fromX = p.x; p.fromY = p.y; p.side = other(p.side); p.steps = 0; p.d = 0; p.enterT = now(); p.lastLike = now() + cfg.yard.flySec; p.flyK = 0; } break; }
     case 'clear': all().forEach(p => { if (p.state === 'bridge' || p.state === 'center') toYard(p); }); break;
     case 'clearAll': all().forEach(p => { if (p.state !== 'kiss') PEOPLE.delete(p.id); }); break;
     case 'clearDone': followed.clear(); break;
     case 'skip': if (pair && pair.phase !== 'out') endKiss(); break;
     case 'forcePair': {
       if (pair) break;
-      const top = s => pickPartners(s, 1)[0];
-      const a = top('L'), b = top('R');
+      const a = pickPartners('L', 1)[0], b = a && pickPartners('R', 1, [a])[0];
       if (a && b) { a.state = 'center'; b.state = 'center'; startKiss(a, [b]); }
       break;
     }
@@ -1034,6 +1061,12 @@ const RULES_V3 = {
   ] },
   kiss: { cam: { split: 836, camTop: 520, scale: 1, kissCropY: 520, toastY: 1560 } },
   chat: { x: 620, y: 240, w: 310, h: 280, kissX: 300, kissY: 900, kissW: 340, kissH: 205 }
+};
+const RULES_V4 = {
+  schema: 4,
+  yard: { maxShow: 28 },
+  boards: { guide: { x: 298, y: 902, w: 348, h: 234 }, guideBg: '#6c0f1e' },
+  sfx: { files: { join: '', fly: '', kiss: '', gift: '', fanfare: '', poof: '' }, vols: { join: 1, fly: 1, kiss: 1, gift: 1, fanfare: 1, poof: 1 } }
 };
 // one-time settings migration for the new rules (runs inside hot-updated content, no new exe needed)
 const NEW_RULES = {
@@ -1069,6 +1102,11 @@ const NEW_RULES = {
   cfg = await API.getSettings();
   if ((cfg.schema || 0) < 2) { cfg = await API.setSettings(NEW_RULES); log('Đã chuyển sang luật chơi mới (sân chờ + thả tim)'); }
   if ((cfg.schema || 0) < 3) { cfg = await API.setSettings(RULES_V3); log('Đã chuyển sang bối cảnh mới (quảng trường + camera chia đôi)'); }
+  if ((cfg.schema || 0) < 4) {
+    const patch = JSON.parse(JSON.stringify(RULES_V4));
+    if (/\{side\}|bên \{side\}/.test(cfg.voice.welcomeTpl || '')) patch.voice = { welcomeTpl: cfg.voice.welcomeTpl.replace(/,?\s*bạn xếp hàng bên \{side\}/, '').replace('{side}', '') };
+    cfg = await API.setSettings(patch); log('Đã cập nhật: sân chờ chung, âm thanh tuỳ chỉnh, bảng hướng dẫn lớn');
+  }
   rebuildPaths();
   await Promise.all(['800 20px B2', '20px PX'].map(f => document.fonts.load(f, 'Aàáạ')));
   await loadAssets();

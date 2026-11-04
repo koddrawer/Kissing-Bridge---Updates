@@ -29,6 +29,7 @@ function fill() {
   $('#musicName').textContent = S.music.file ? S.music.file.split(/[\\/]/).pop() : '(không có)';
   renderTiers();
   renderGiftBtns();
+  renderSounds();
 }
 $$('[data-k]').forEach(el => {
   const ev = el.tagName === 'TEXTAREA' || el.type === 'text' ? 'change' : 'input';
@@ -53,6 +54,18 @@ function renderTiers() {
     tiers[el.dataset.ti][f] = f === 'coins' ? Math.max(1, parseInt(el.value) || 1) : f === 'speed' ? Math.max(1, parseFloat(el.value) || 1) : f === 'chain' ? Math.max(0, parseInt(el.value) || 0) : el.value;
     API.setSettings({ tiers }).then(s => S = s);
   });
+}
+const SOUNDS = [['join', '🔔 Tiếng vào (sân chờ)'], ['fly', '🕊 Bay lên cầu'], ['kiss', '💋 Tiếng hôn'], ['gift', '🎁 Tiếng nhận quà'], ['fanfare', '🖼 Tiếng khung'], ['poof', '💨 Rời cầu']];
+function renderSounds() {
+  const t = $('#sounds'); if (!t || t.contains(document.activeElement)) return;
+  const F = (S.sfx && S.sfx.files) || {}, V = (S.sfx && S.sfx.vols) || {};
+  t.innerHTML = SOUNDS.map(([k, label]) => `<tr><td style="min-width:150px">${label}</td>
+    <td class="hint" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(F[k] || '')}">${F[k] ? esc(F[k].split(/[\\/]/).pop()) : 'mặc định'}</td>
+    <td><button class="b s" data-snd-pick="${k}">Chọn file</button> <button class="b s" data-snd-def="${k}">Mặc định</button> <button class="b s" data-cmd='{"type":"sfx","name":"${k}"}'>▶</button></td>
+    <td><input type="range" min="0" max="1.5" step="0.05" value="${V[k] ?? 1}" data-snd-vol="${k}" style="width:80px"></td></tr>`).join('');
+  t.querySelectorAll('[data-snd-pick]').forEach(b => b.onclick = async () => { const f = await API.pickMusic(); if (f) { await set('sfx.files.' + b.dataset.sndPick, f); renderSounds(); } });
+  t.querySelectorAll('[data-snd-def]').forEach(b => b.onclick = async () => { await set('sfx.files.' + b.dataset.sndDef, ''); renderSounds(); });
+  t.querySelectorAll('[data-snd-vol]').forEach(r => r.onchange = () => set('sfx.vols.' + r.dataset.sndVol, parseFloat(r.value)));
 }
 function renderGiftBtns() {
   const mk = (ex) => S.tiers.map(t => `<button class="b" data-cmd='${JSON.stringify({ type: 'fakeGift', coins: t.coins, toExisting: ex })}'>🎁 ${t.coins} xu</button>`).join('');
@@ -112,8 +125,8 @@ API.onStageState(st => {
   $('#qLn').textContent = st.L.length; $('#qRn').textContent = st.R.length;
   $('#cDone').textContent = st.done; $('#cVoice').textContent = st.voiceQ;
   $('#pairNow').textContent = st.pair ? `💋 ${st.pair[0].name}  ❤  ${st.pair[1].name}${st.chain ? '  (hôn liền ' + st.chain[0] + '/' + st.chain[1] + ')' : ''}  (${st.phase})` : 'Đang chờ cặp tiếp theo…';
-  const sig = JSON.stringify([st.L.map(p => p.id + p.state + p.steps + p.coins), st.R.map(p => p.id + p.state + p.steps + p.coins)]);
-  if (sig !== lastQ && !$('#t-queue').matches(':hover')) { lastQ = sig; qList($('#qL'), st.L, 'L'); qList($('#qR'), st.R, 'R'); }
+  const sig = JSON.stringify([st.L.map(p => p.id + p.state + p.steps + p.coins), st.R.map(p => p.id + p.state + p.steps + p.coins), (st.Y || []).map(p => p.id)]);
+  if (sig !== lastQ && !$('#t-queue').matches(':hover')) { lastQ = sig; qList($('#qL'), st.L, 'L'); qList($('#qR'), st.R, 'R'); if (st.Y) { qList($('#qY'), st.Y, 'Y'); $('#qYn').textContent = st.counts ? st.counts.yard : st.Y.length; } }
 });
 API.onLog(log);
 API.onSettings(s => { S = s; fill(); });

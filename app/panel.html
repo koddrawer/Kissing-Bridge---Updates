@@ -83,12 +83,13 @@
   <div class="card"><h3>Điều khiển</h3>
     <div class="row"><button class="b p" data-cmd="forcePair">💋 Ghép cặp ngay</button><button class="b" data-cmd="skip">⏭ Bỏ qua cảnh hôn</button></div>
     <div class="row"><button class="b" data-cmd="clear">↩ Đưa hết về sân chờ</button><button class="b" data-cmd="clearAll">🗑 Xoá tất cả</button><button class="b" data-cmd="clearDone">↺ Cho follow lại được tính</button></div>
-    <div class="hint">⬆ đưa lên cầu / ra giữa cầu · ⇄ sang bên kia (về sân chờ) · ✕ xoá</div>
+    <div class="hint">⬆ đưa lên cầu / ra giữa cầu · ⇄ đổi sang cầu bên kia · ✕ xoá. Người lên cầu được chia luân phiên trái/phải.</div>
   </div>
   <div class="cols">
     <div class="card"><h3>Bên trái (<span id="qLn">0</span>)</h3><div class="q" id="qL"></div></div>
     <div class="card"><h3>Bên phải (<span id="qRn">0</span>)</h3><div class="q" id="qR"></div></div>
   </div>
+  <div class="card"><h3>Sân chờ (<span id="qYn">0</span>)</h3><div class="q" id="qY"></div></div>
 </section>
 
 <!-- TEST -->
@@ -139,8 +140,12 @@
     <div class="row"><label>Chúc mừng khung donate</label></div><textarea data-k="voice.donorTpl"></textarea>
     <div class="hint">Biến: <code>{name}</code> <code>{side}</code> <code>{a}</code> <code>{b}</code> <code>{gift}</code> <code>{speed}</code> <code>{n}</code> <code>{frame}</code></div>
   </div>
+  <div class="card"><h3>Âm thanh tuỳ chỉnh</h3>
+    <table id="sounds"></table>
+    <div class="hint">Chọn file .mp3/.wav/.ogg của bạn cho từng âm. "Mặc định" = dùng lại âm 8-bit có sẵn. Kéo âm lượng về 0 để tắt riêng âm đó.</div>
+  </div>
   <div class="card"><h3>Hiệu ứng & nhạc nền</h3>
-    <div class="row"><label>Âm hiệu ứng</label><input type="range" min="0" max="1" step="0.05" data-k="sfx.volume"><span data-show="sfx.volume"></span></div>
+    <div class="row"><label>Âm hiệu ứng (tổng)</label><input type="range" min="0" max="1" step="0.05" data-k="sfx.volume"><span data-show="sfx.volume"></span></div>
     <div class="row"><label>Nhạc nền</label><span id="musicName" class="hint" style="flex:1"></span><button class="b" id="btnMusic">Chọn file</button><button class="b" id="btnMusicOff">Tắt</button></div>
     <div class="row"><label>Âm lượng nhạc</label><input type="range" min="0" max="1" step="0.05" data-k="music.volume"><span data-show="music.volume"></span></div>
   </div>
@@ -191,7 +196,7 @@
     <div class="row"><label>Mép trên: y / x trái / x phải</label><input type="number" data-k="yard.topY" style="width:60px"><input type="number" data-k="yard.topX0" style="width:60px"><input type="number" data-k="yard.topX1" style="width:60px"></div>
     <div class="row"><label>Mép dưới: y / x trái / x phải</label><input type="number" data-k="yard.bottomY" style="width:60px"><input type="number" data-k="yard.bottomX0" style="width:60px"><input type="number" data-k="yard.bottomX1" style="width:60px"></div>
     <div class="row"><label>Cao nhân vật xa / gần</label><input type="number" data-k="yard.charTop"><input type="number" data-k="yard.charBottom"></div>
-    <div class="row"><label>Hiện tối đa mỗi bên</label><input type="number" data-k="yard.maxShow"></div>
+    <div class="row"><label>Hiện tối đa trên sân</label><input type="number" data-k="yard.maxShow"></div>
     <div class="row"><label>Tốc độ đi lang thang</label><input type="number" data-k="yard.walkSpeed"></div>
     <div class="row"><label>Bay lên cầu: thời gian (s) / độ cao</label><input type="number" step="0.1" data-k="yard.flySec"><input type="number" data-k="yard.flyHeight"></div>
     <div class="hint">Bật "Hiện đường đi" để thấy khung sân chờ (nét vàng).</div>
