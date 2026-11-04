@@ -830,7 +830,7 @@ function drawKissPanel() {
   const title = pair && (pair.phase === 'showcase' || (pair.phase === 'out' && tier)) && tier ? '🎉 ' + tierLabel(tier) + ' 🎉'
     : pair && pair.chain ? S('streak', { i: pair.idx, n: pair.total }) : ((isEN() ? EN().panelTitle : K.panelTitle) || S('panelTitle'));
   ctx.font = '800 34px B2, sans-serif';
-  const tw = Math.min(WW - 80, ctx.measureText(title).width + 70), ty = y0 + 40 + ((cfg.ticker || {}).show === false ? 0 : ((cfg.ticker || {}).h || 44) + 4), cx = WW / 2;
+  const tw = Math.min(WW - 80, ctx.measureText(title).width + 70), ty = y0 + 40, cx = WW / 2;
   ctx.fillStyle = '#4a0f24'; rrect(cx - tw / 2 - 4, ty - 30, tw + 8, 60, 30); ctx.fill();
   ctx.fillStyle = '#b3123f'; rrect(cx - tw / 2, ty - 26, tw, 52, 26); ctx.fill();
   ctx.lineWidth = 3; ctx.strokeStyle = '#ffd34d'; ctx.stroke();
@@ -1004,7 +1004,10 @@ let tickerX = null;
 function drawTicker(dt) {
   const T = cfg.ticker || {}; if (T.show === false) return;
   const raw = isEN() ? EN().ticker : (T.text || VI_TICKER);
-  const text = tpl(raw, guideVars()), h = T.h || 44, fs = T.fontSize || 24, y = T.y || 0;
+  const C = camOf(), h = T.h || 44, fs = T.fontSize || 24;
+  const text = tpl(raw, guideVars());
+  // while kissing, slide down onto the split line so it doesn't cover the close-up
+  const y = lerp(T.y || 0, C.split - h / 2, camE());
   ctx.save();
   const g = ctx.createLinearGradient(0, y, 0, y + h);
   g.addColorStop(0, 'rgba(90,10,40,.82)'); g.addColorStop(1, 'rgba(60,6,28,.82)');
@@ -1209,6 +1212,7 @@ const RULES_V4 = {
   sfx: { files: { join: '', fly: '', kiss: '', gift: '', fanfare: '', poof: '' }, vols: { join: 1, fly: 1, kiss: 1, gift: 1, fanfare: 1, poof: 1 } }
 };
 const RULES_V5 = { schema: 5, boards: { guide: { x: 286, y: 903, w: 366, h: 242 }, guideBg: '#6e101c' } };
+const RULES_V7 = { schema: 7 };
 const RULES_V6 = { schema: 6, lang: 'vi', ticker: { show: true, text: '', speed: 90, h: 44, fontSize: 24, y: 0 }, en: JSON.parse(JSON.stringify(EN_DEFAULTS)), boards: { guideTitleRect: { x: 340, y: 821, w: 262, h: 80 } } };
 // one-time settings migration for the new rules (runs inside hot-updated content, no new exe needed)
 const NEW_RULES = {
@@ -1255,6 +1259,12 @@ const NEW_RULES = {
     cfg = await API.setSettings(patch); log('Đã đổi ảnh nền Kissing Island');
   }
   if ((cfg.schema || 0) < 6) { cfg = await API.setSettings(RULES_V6); log('Đã thêm: màn live tiếng Anh + dải chữ hướng dẫn chạy'); }
+  if ((cfg.schema || 0) < 7) {
+    const patch = { schema: 7 };
+    if (!(cfg.ticker && cfg.ticker.y)) patch.ticker = { y: 294 };               // ngay dưới logo
+    if ((cfg.chat.y || 0) < 350) patch.chat = { y: 352 };
+    cfg = await API.setSettings(patch); log('Dải chữ chạy đã dời xuống dưới logo');
+  }
   rebuildPaths();
   await Promise.all(['800 20px B2', '20px PX'].map(f => document.fonts.load(f, 'Aàáạ')));
   await loadAssets();
