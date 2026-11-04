@@ -1,11 +1,11 @@
 {
- "version": "1.1.0",
- "date": "2026-11-03T20:52:56.715Z",
+ "version": "1.2.0",
+ "date": "2026-11-04T00:12:26.986Z",
  "files": [
   {
    "path": "assets/bg/bridge.png",
-   "sha1": "24ecb1d8c6c5d133bb5537b73aeeee0f5e0c65c2",
-   "size": 2316051
+   "sha1": "3b091a8fecb0ac151c4a2a34ee3016904f8578b9",
+   "size": 3051039
   },
   {
    "path": "assets/bg/kiss.png",
@@ -114,8 +114,8 @@
   },
   {
    "path": "panel.html",
-   "sha1": "ecbec2f5074d14962028f747baf0bf5ccb44890e",
-   "size": 20525
+   "sha1": "da773a53f46469b564bddd4c5e4a0f0f7dbd2d4a",
+   "size": 20749
   },
   {
    "path": "panel.js",
@@ -129,8 +129,8 @@
   },
   {
    "path": "stage.js",
-   "sha1": "b12eaf0c24e07016b6dc07d29169154a9c40ebbb",
-   "size": 57713
+   "sha1": "0ce35b8f995bf49b05c94a48d75bba4c6007d089",
+   "size": 59596
   }
  ]
 }

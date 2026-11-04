@@ -236,10 +236,11 @@ function pruneYard(side) {
 
 function toBridge(p, why) {
   if (!p || p.state !== 'yard') return false;
-  p.state = 'bridge'; p.steps = 0; p.d = 0; p.lastLike = now(); p.enterT = now(); p.active = Date.now();
-  p.fromX = p.x; p.fromY = p.y;
+  if (p.wx == null || !p.vis) placeInYard(p);
+  p.state = 'bridge'; p.steps = 0; p.d = 0; p.enterT = now(); p.lastLike = now() + cfg.yard.flySec; p.active = Date.now();
+  p.fromX = p.x; p.fromY = p.y; p.flyK = 0;
   toast('🌉 ' + shortName(p.name, 16) + ' lên cầu ' + sideName(p.side) + ' · thả tim để bước!', '#bfe9ff', 2.4);
-  sfx('join');
+  sfx('fly');
   return true;
 }
 function toYard(p, reason) {
@@ -249,7 +250,8 @@ function toYard(p, reason) {
     toast('⌛ ' + shortName(p.name, 16) + ' rời cầu vì không thả tim', '#ffc2c2', 2.4);
     sfx('poof');
   }
-  p.state = 'yard'; p.steps = 0; p.d = 0; p.dash = false; p.arriveSeq = 0;
+  p.state = 'yard'; p.steps = 0; p.d = 0; p.dash = false; p.arriveSeq = 0; p.flyK = 1;
+  placeInYard(p);
   if (reason === 'kiss') { p.coins = 0; p.tier = 0; p.chain = 0; }
 }
 function arrive(p) {
@@ -397,6 +399,7 @@ function sfx(name) {
     else if (name === 'sparkle') { [1568, 2093, 2637, 3136].forEach((f, i) => tone(f, i * .06, .2, 'triangle', .1)); }
     else if (name === 'fanfare') { [[523, 0], [523, .14], [523, .28], [659, .42], [784, .7], [659, .9], [784, 1.05], [1047, 1.2]].forEach(([f, t]) => tone(f, t, .22, 'square', .12)); }
     else if (name === 'heart') { tone(1760, 0, .05, 'square', .05); }
+    else if (name === 'fly') { tone(400, 0, .35, 'square', .07, 1400); [1047, 1319, 1568].forEach((f, i) => tone(f, .25 + i * .06, .1, 'triangle', .07)); }
     else if (name === 'poof') { noise(0, .25, .2, 700); tone(500, 0, .25, 'square', .06, 150); }
     else if (name === 'arrive') { [784, 988, 1175].forEach((f, i) => tone(f, i * .08, .12, 'square', .08)); }
   } catch {}
@@ -466,29 +469,38 @@ function rrect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
 
 // ---------------------------------------------------------------- bridge scene
 function scaleAtY(y) {
-  const p = cfg.bridge, near = 1250, far = 882;
-  return lerp(p.farScale, 1, clamp((y - far) / (near - far), 0, 1));
+  const b = cfg.bridge, near = b.nearY || 1228, far = b.farY || 556;
+  return lerp(b.farScale, 1, clamp((y - far) / (near - far), 0, 1));
 }
-function yardRect(side) { return (cfg.yard || {})[side]; }
-function layoutYard(side) {
-  const Y = cfg.yard, R = yardRect(side);
-  const list = onSide(side, ['yard']).sort((a, b) => b.active - a.active);
-  const show = list.slice(0, Y.maxShow);
-  const perRow = Math.max(1, Math.ceil(show.length / 2));
-  const cols = Math.max(perRow, Math.floor(Y.maxShow / 2));
-  show.forEach((p, i) => {
-    const row = i % 2, col = (i / 2) | 0;
-    const sp = (R.w - 30) / cols;
-    p.x = R.x + 15 + sp * (col + .5) + (row ? sp * .5 : 0) - sp * .25;
-    if (p.x > R.x + R.w - 12) p.x -= sp;
-    p.y = R.y + R.h - 10 - (row ? Y.rowGap : 0);
-    p.vis = true; p.yRow = row;
-  });
-  list.slice(Y.maxShow).forEach(p => { p.vis = false; p.x = R.x + R.w / 2; p.y = R.y + R.h - 8; });
-  return { list, show };
+// ---- yard (sân chờ = quảng trường phía dưới), people wander around
+function yardX(y, side) {               // x range of the plaza at height y, for one side
+  const Y = cfg.yard, k = clamp((y - Y.topY) / (Y.bottomY - Y.topY), 0, 1);
+  const x0 = lerp(Y.topX0, Y.bottomX0, k), x1 = lerp(Y.topX1, Y.bottomX1, k), mid = (x0 + x1) / 2, gap = Y.midGap / 2;
+  return side === 'L' ? [x0, mid - gap] : [mid + gap, x1];
+}
+function yardScale(y) { const Y = cfg.yard; return lerp(Y.charTop, Y.charBottom, clamp((y - Y.topY) / (Y.bottomY - Y.topY), 0, 1)) / cfg.bridge.charH; }
+function randYardPoint(side) {
+  const Y = cfg.yard, y = rand(Y.topY + 25, Y.bottomY), [a, b] = yardX(y, side);
+  return [rand(a + 15, b - 15), y];
+}
+function placeInYard(p) { const [x, y] = randYardPoint(p.side); p.x = p.wx = x; p.y = p.wy = y; p.wait = rand(.3, 3); }
+function updYard(dt) {
+  const Y = cfg.yard;
+  for (const side of ['L', 'R']) {
+    const list = onSide(side, ['yard']).sort((a, b) => b.active - a.active);
+    list.forEach((p, i) => {
+      p.vis = i < Y.maxShow;
+      if (p.wx == null) placeInYard(p);
+      if (p.wait > 0) { p.wait -= dt; p.moving = false; return; }
+      const dx = p.wx - p.x, dy = p.wy - p.y, d = Math.hypot(dx, dy);
+      if (d < 2) { p.wait = rand(1, 4.5); const [x, y] = randYardPoint(side); p.wx = x; p.wy = y; p.moving = false; return; }
+      const sp = (p.walkSp || (p.walkSp = rand(.75, 1.25) * Y.walkSpeed)) * yardScale(p.y);
+      p.x += dx / d * Math.min(d, sp * dt); p.y += dy / d * Math.min(d, sp * dt); p.moving = true;
+    });
+  }
 }
 function updBridge(dt) {
-  const T = cfg.timing, g = G(), tnow = now();
+  const T = cfg.timing, g = G(), tnow = now(), fly = cfg.yard.flySec;
   for (const side of ['L', 'R']) {
     const len = PATH[side].len, stepPx = stepLen(side);
     const centers = onSide(side, ['center']).sort((a, b) => a.arriveSeq - b.arriveSeq);
@@ -499,20 +511,28 @@ function updBridge(dt) {
       if (tnow - p.lastLike > g.idleSec) { toYard(p, 'idle'); continue; }
     }
     for (const p of onSide(side, ['bridge', 'center'])) {
+      const e = (tnow - p.enterT) / fly;
+      if (e < 1 && p.fromX != null) {                                  // bay từ sân chờ tới chân cầu
+        const [x1, y1] = PATH[side].at(0), k = ease(clamp(e, 0, 1));
+        p.x = lerp(p.fromX, x1, k); p.y = lerp(p.fromY, y1, k); p.lift = Math.sin(clamp(e, 0, 1) * Math.PI) * cfg.yard.flyHeight;
+        p.flyK = k; p.moving = false; p.vis = true;
+        if (Math.random() < dt * 30) sparkles.push({ x: p.x + rand(-10, 10), y: p.y - p.lift - rand(10, 60), t: 0, w: true });
+        continue;
+      }
+      p.lift = 0; p.flyK = 1;
       const diff = p.tgt - p.d;
       const sp = T.walkSpeed * (p.dash ? 5 : 1) * (diff > 120 ? 1.8 : 1);
       if (Math.abs(diff) > .5) { p.d += Math.sign(diff) * Math.min(Math.abs(diff), sp * dt); p.moving = true; }
       else { p.moving = false; if (p.dash && p.state === 'center') p.dash = false; }
-      let [x, y] = PATH[side].at(p.d);
-      const e = clamp((tnow - p.enterT) / .6, 0, 1);
-      if (e < 1 && p.fromX != null) { x = lerp(p.fromX, x, ease(e)); y = lerp(p.fromY, y, ease(e)); p.moving = true; }
+      const [x, y] = PATH[side].at(p.d);
       p.x = x; p.y = y; p.vis = true;
     }
-    layoutYard(side);
   }
+  updYard(dt);
+  for (let i = sparkles.length - 1; i >= 0; i--) if (sparkles[i].w) { sparkles[i].t += dt; if (sparkles[i].t > .8) sparkles.splice(i, 1); }
   if (scene === 'bridge' && !pair) tryPair();
 }
-function readyAtCenter(p) { return p.state === 'center' && now() - p.arriveT >= cfg.timing.waitAtEndSec && Math.abs(p.d - p.tgt) < 3; }
+function readyAtCenter(p) { return p.state === 'center' && now() - p.arriveT >= cfg.timing.waitAtEndSec && Math.abs(p.d - p.tgt) < 3 && (p.flyK ?? 1) >= 1; }
 function pickPartners(side, n) {
   const c = onSide(side, ['center']).sort((a, b) => a.arriveSeq - b.arriveSeq);
   const b = onSide(side, ['bridge']).sort((a, b) => b.steps - a.steps);
@@ -552,51 +572,45 @@ function drawNameTag(p, x, y, size) {
     txt(name, x, y + 1, size, '#fff', 'center', '#2a0712', size * .18);
   } else txt(name, x, y, size, '#fff', 'center', '#2a0712');
 }
-function drawYardPlaque(side) {
-  const R = yardRect(side), n = onSide(side, ['yard']).length;
-  ctx.fillStyle = 'rgba(70,12,36,.55)'; rrect(R.x, R.y, R.w, R.h, 16); ctx.fill();
-  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,211,77,.85)'; ctx.stroke();
-  const label = '🏖 SÂN CHỜ ' + sideName(side) + ' · ' + n;
-  ctx.font = '800 17px B2, sans-serif';
-  const w = ctx.measureText(label).width + 22, lx = R.x + (R.w - w) / 2;
-  ctx.fillStyle = '#b3123f'; rrect(lx, R.y - 26, w, 26, 13); ctx.fill();
-  ctx.lineWidth = 2; ctx.strokeStyle = '#ffd34d'; ctx.stroke();
-  txt(label, lx + w / 2, R.y - 12, 17, '#ffe066', 'center', '#4a0f24', 4);
-}
 function drawBridge() {
   ctx.drawImage(IMG.bridge, 0, 0, WW, WH);
   const t = now(), g = G(), Y = cfg.yard;
-  drawYardPlaque('L'); drawYardPlaque('R');
+  drawGuide();
   const list = all().filter(p => p.vis && (p.state === 'bridge' || p.state === 'center' || p.state === 'yard'));
-  list.sort((a, b) => a.y - b.y);
-  for (const p of list) {
-    const inYard = p.state === 'yard';
-    const s = inYard ? Y.charH / cfg.bridge.charH : scaleAtY(p.y), h = cfg.bridge.charH * s;
+  const flying = list.filter(p => p.state !== 'yard' && (p.flyK ?? 1) < 1);
+  const ground = list.filter(p => !flying.includes(p)).sort((a, b) => a.y - b.y);
+  for (const p of [...ground, ...flying]) {
+    const inYard = p.state === 'yard', fl = !inYard && (p.flyK ?? 1) < 1;
+    const s = inYard ? yardScale(p.y) : fl ? lerp(yardScale(p.fromY), scaleAtY(p.y), p.flyK) : scaleAtY(p.y);
+    const h = cfg.bridge.charH * s, lift = fl ? p.lift : 0;
     const bob = p.moving ? Math.abs(Math.sin(t * 9 + p.phase)) * 5 * s : Math.sin(t * 2 + p.phase) * 1.2 * s;
-    const tilt = p.moving ? Math.sin(t * 9 + p.phase) * 0.06 : 0;
+    const tilt = p.moving ? Math.sin(t * 9 + p.phase) * 0.06 : fl ? Math.sin(t * 14) * .08 : 0;
     let alpha = 1;
-    if (p.state === 'bridge') { const left = g.idleSec - (t - p.lastLike); if (left < 3) alpha = .45 + .55 * Math.abs(Math.sin(t * 8)); }
-    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(tilt); ctx.translate(-p.x, -p.y);
-    ctx.fillStyle = 'rgba(40,10,20,.28)'; ctx.beginPath(); ctx.ellipse(p.x, p.y, 20 * s, 6 * s, 0, 0, 7); ctx.fill();
-    drawPerson(p, p.x, p.y - bob, h, 'stand', false, alpha);
+    if (p.state === 'bridge' && !fl) { const left = g.idleSec - (t - p.lastLike); if (left < 3) alpha = .45 + .55 * Math.abs(Math.sin(t * 8)); }
+    ctx.fillStyle = 'rgba(40,10,20,.28)'; ctx.beginPath(); ctx.ellipse(p.x, p.y, 20 * s * (1 - lift / 400), 6 * s, 0, 0, 7); ctx.fill();
+    const fy = p.y - bob - lift;
+    ctx.save(); ctx.translate(p.x, fy); ctx.rotate(tilt); ctx.translate(-p.x, -fy);
+    if (fl) { ctx.shadowColor = 'rgba(255,230,120,.95)'; ctx.shadowBlur = 25; }
+    drawPerson(p, p.x, fy, h, 'stand', false, alpha);
     ctx.restore();
+    if (fl) { drawPixelHeart(p.x - 26 * s, fy - h * .5, 2.5, '#ff6fa0'); drawPixelHeart(p.x + 26 * s, fy - h * .5, 2.5, '#ff6fa0'); }
+    const nameY = fy - h - 10 * s;
     if (inYard) {
-      txt(fitText(shortName(p.name, 10), 13, 50), p.x, p.y - h - 8, 13, p.coins ? '#ffe066' : '#fff', 'center', '#2a0712', 3.5);
+      const fs = Math.round(clamp(14 * s * 1.25, 12, 18));
+      txt(fitText(shortName(p.name, 12), fs, 95), p.x, nameY + 2, fs, p.coins ? '#ffe066' : '#fff', 'center', '#2a0712', 3.5);
       continue;
     }
-    const nameY = p.y - h - bob - 10 * s;
-    drawNameTag(p, p.x, nameY, Math.round(cfg.bridge.nameSize * clamp(s * 1.1, .75, 1.2)));
-    // progress bar (bước chân)
+    drawNameTag(p, p.x, nameY, Math.round(cfg.bridge.nameSize * clamp(s * 1.1, .7, 1.2)));
+    if (fl) continue;
     const bw = 46, bx = p.x - bw / 2, by = nameY + 12;
     ctx.fillStyle = 'rgba(40,6,20,.75)'; rrect(bx - 1, by - 1, bw + 2, 7, 3); ctx.fill();
     ctx.fillStyle = p.state === 'center' ? '#ffd34d' : '#ff6fa0'; rrect(bx, by, bw * clamp(p.steps / g.steps, 0, 1), 5, 2); ctx.fill();
-    // badges
     const tob = tierObj(p);
     if (tob && p.state === 'bridge') txt(tob.chain ? '💋x' + tob.chain : '⚡x' + tob.speed, p.x + 34, nameY - 16, 15, '#ffe066', 'center', '#4a0f24', 4);
     if (p.state === 'bridge') {
       const left = g.idleSec - (t - p.lastLike);
       if (left < 5) txt('⏳' + Math.ceil(left) + 's · thả tim!', p.x, nameY - 20, 15, '#ffb0b0', 'center', '#4a0f24', 4);
-      else if (t - p.enterT < 3 && p.steps === 0) txt('❤ thả tim để bước', p.x, nameY - 20, 15, '#ffe0ec', 'center', '#4a0f24', 4);
+      else if (t - p.enterT < 3 + Y.flySec && p.steps === 0) txt('❤ thả tim để bước', p.x, nameY - 20, 15, '#ffe0ec', 'center', '#4a0f24', 4);
     }
     if (p.state === 'center' && p.cIdx === 0 && !onSide(other(p.side), ['center']).length && !p.chain) {
       ctx.globalAlpha = .9 + Math.sin(t * 4) * .1;
@@ -604,9 +618,10 @@ function drawBridge() {
       ctx.globalAlpha = 1;
     }
   }
+  for (const s of sparkles) if (s.w) drawSparkle(s.x, s.y, 8 * Math.sin(s.t / .8 * Math.PI), Math.sin(s.t / .8 * Math.PI));
   for (const side of ['L', 'R']) {
     const hidden = onSide(side, ['yard']).length - Y.maxShow;
-    if (hidden > 0) { const R = yardRect(side); txt('+' + hidden + ' người', R.x + R.w - 36, R.y + 16, 15, '#ffe066', 'center', '#4a0f24', 4); }
+    if (hidden > 0) txt('+' + hidden + ' người ở sân chờ', side === 'L' ? Y.bottomX0 + 90 : Y.bottomX1 - 90, Y.bottomY - 8, 16, '#ffe066', 'center', '#4a0f24', 4);
   }
   if (cfg.bridge.showPath) {
     for (const side of ['L', 'R']) {
@@ -615,8 +630,9 @@ function drawBridge() {
       ctx.stroke();
       cfg.bridge[side === 'L' ? 'leftPath' : 'rightPath'].forEach((pt, i) => txt(String(i), pt[0], pt[1], 14, '#ff0', 'center', '#000'));
     }
+    ctx.strokeStyle = '#ff0'; ctx.setLineDash([8, 6]); ctx.beginPath();
+    ctx.moveTo(Y.topX0, Y.topY); ctx.lineTo(Y.topX1, Y.topY); ctx.lineTo(Y.bottomX1, Y.bottomY); ctx.lineTo(Y.bottomX0, Y.bottomY); ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
   }
-  drawBoards();
 }
 
 function guideVars() {
@@ -624,43 +640,23 @@ function guideVars() {
   cfg.tiers.forEach((t, i) => { v['t' + (i + 1)] = t.coins; v['s' + (i + 1)] = t.speed; v['c' + (i + 1)] = t.chain || ''; });
   return v;
 }
-function drawBoards() {
-  const B = cfg.boards;
-  for (const side of ['L', 'R']) {
-    const cx = side === 'L' ? B.leftX : B.rightX, x0 = cx - B.rowW / 2;
-    const q = onSide(side, ['center', 'bridge']).sort((a, b) => (b.state === 'center') - (a.state === 'center') || (a.arriveSeq - b.arriveSeq) || (b.steps - a.steps));
-    const nYard = onSide(side, ['yard']).length;
-    const showN = Math.min(q.length, B.rows - 1);
-    for (let i = 0; i < showN; i++) {
-      const p = q[i], y = B.firstRowY + i * B.rowH;
-      const col = p.tier ? ['#ff9ec4', '#8fd0ff', '#ff8a8a', '#ffd34d'][(p.tier - 1) % 4] : '#fff6e0';
-      txt(String(i + 1), x0 + 14, y, B.fontSize * .9, '#ffd36b', 'center', '#2a0712');
-      txt(fitText(p.name, B.fontSize, B.rowW - 82), x0 + 30, y, B.fontSize, col, 'left', '#2a0712');
-      const st = p.state === 'center' ? '💗' : Math.floor(p.steps) + '';
-      txt(st, x0 + B.rowW - 8, y, B.fontSize * .85, p.state === 'center' ? '#ff9ec4' : '#bfe9ff', 'right', '#2a0712');
-    }
-    if (!q.length) txt('Cầu đang trống', cx, B.firstRowY, B.fontSize * .9, 'rgba(255,240,220,.6)', 'center', null);
-    const more = q.length - showN;
-    const ly = B.firstRowY + (B.rows - 1) * B.rowH;
-    txt(fitText('🏖 Sân chờ: ' + nYard + (more > 0 ? ' · +' + more + ' trên cầu' : ''), B.fontSize * .85, B.rowW - 10), cx, ly, B.fontSize * .85, '#ffd36b');
-  }
-  // guide (center board) — cover the baked text and draw ours
-  ctx.fillStyle = '#5a1530';
-  rrect(324, 1380, 297, 214, 10); ctx.fill();
-  if (B.guideTitle) { ctx.fillStyle = '#5a1530'; rrect(340, 1308, 262, 70, 8); ctx.fill(); txt(B.guideTitle, 471, 1342, 30, '#ffd36b'); }
+function drawGuide() {
+  const B = cfg.boards, R = B.guide || { x: 346, y: 898, w: 252, h: 160 };
+  ctx.fillStyle = B.guideBg || '#6a1222';
+  rrect(R.x, R.y, R.w, R.h, 6); ctx.fill();
   const vars = guideVars();
   const lines = (B.guideLines || []).map(l => tpl(l, vars));
-  const n = lines.length || 1, h = 206 / n;
+  const n = lines.length || 1, h = R.h / n, tw = R.w - 34;
   lines.forEach((l, i) => {
-    const y = 1385 + h * i + h / 2;
-    if (i) { ctx.fillStyle = 'rgba(255,190,120,.18)'; ctx.fillRect(338, y - h / 2, 270, 2); }
-    const r = Math.min(12, h * .36);
-    ctx.fillStyle = '#ffcf3d'; ctx.beginPath(); ctx.arc(347, y, r, 0, 7); ctx.fill();
-    ctx.lineWidth = 2; ctx.strokeStyle = '#7a3a00'; ctx.stroke();
-    txt(String(i + 1), 347, y + 1, r * 1.4, '#5a1530', 'center', null);
-    let fsz = Math.min(19, Math.floor(h * .55)); ctx.font = '800 ' + fsz + 'px B2, sans-serif';
-    while (fsz > 12 && ctx.measureText(l).width > 252) { fsz--; ctx.font = '800 ' + fsz + 'px B2, sans-serif'; }
-    txt(fitText(l, fsz, 252), 366, y + 1, fsz, '#fff3dc', 'left', '#2a0712', 3);
+    const y = R.y + h * i + h / 2;
+    if (i) { ctx.fillStyle = 'rgba(255,190,120,.18)'; ctx.fillRect(R.x + 6, y - h / 2, R.w - 12, 1.5); }
+    const r = Math.min(10, h * .34), cx = R.x + 13;
+    ctx.fillStyle = '#ffcf3d'; ctx.beginPath(); ctx.arc(cx, y, r, 0, 7); ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = '#7a3a00'; ctx.stroke();
+    txt(String(i + 1), cx, y + 1, r * 1.4, '#5a1530', 'center', null);
+    let fsz = Math.min(17, Math.floor(h * .58)); ctx.font = '800 ' + fsz + 'px B2, sans-serif';
+    while (fsz > 10 && ctx.measureText(l).width > tw) { fsz--; ctx.font = '800 ' + fsz + 'px B2, sans-serif'; }
+    txt(fitText(l, fsz, tw), R.x + 28, y + 1, fsz, '#fff3dc', 'left', '#2a0712', 3);
   });
 }
 
@@ -695,45 +691,35 @@ function updPanel(dt) {
     sparkles.length = 0;
   }
 }
+function camOf() { return Object.assign({ split: 836, camTop: 520, scale: 1, kissCropY: 520, toastY: 1560 }, cfg.kiss.cam || {}); }
+function camE() { return ease(clamp(panelA, 0, 1)); }
 function drawKissPanel() {
   if (panelA <= 0) return;
-  const K = cfg.kiss, PN = K.panel || { x: 16, y: 36, w: 909, h: 720, cropY: 585 }, t = now();
-  // render kiss world into offscreen
-  ctx = kissCtx;
+  const K = cfg.kiss, C = camOf(), t = now(), e = camE();
+  ctx = kissCtx;                                   // render kiss world offscreen
   ctx.setTransform(SC, 0, 0, SC, 0, 0);
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   drawKiss(); drawHearts(true);
   ctx = mainCtx;
-  const k = panelTo ? easeOutBack(panelA) : ease(panelA);
-  const cx = PN.x + PN.w / 2, cy = PN.y + PN.h / 2;
-  ctx.save();
-  ctx.globalAlpha = clamp(panelA * 2, 0, 1);
-  ctx.translate(cx, cy); ctx.scale(lerp(.25, 1, k), lerp(.25, 1, k)); ctx.translate(-cx, -cy);
-  const r = 26, bw = 10;
-  // outer gold frame
-  ctx.fillStyle = '#4a0f24'; rrect(PN.x - bw - 4, PN.y - bw - 4, PN.w + (bw + 4) * 2, PN.h + (bw + 4) * 2, r + 12); ctx.fill();
-  const g = ctx.createLinearGradient(0, PN.y, 0, PN.y + PN.h);
-  g.addColorStop(0, '#fff1a8'); g.addColorStop(.5, '#ffc93a'); g.addColorStop(1, '#e08a12');
-  ctx.fillStyle = g; rrect(PN.x - bw, PN.y - bw, PN.w + bw * 2, PN.h + bw * 2, r + 8); ctx.fill();
-  ctx.fillStyle = '#ff6fa0'; rrect(PN.x - 3, PN.y - 3, PN.w + 6, PN.h + 6, r + 2); ctx.fill();
-  // scene (cropped)
-  const srcH = WW * PN.h / PN.w;
-  ctx.save(); rrect(PN.x, PN.y, PN.w, PN.h, r); ctx.clip();
-  ctx.drawImage(kissCv, 0, PN.cropY * SC, WW * SC, srcH * SC, PN.x, PN.y, PN.w, PN.h);
-  ctx.restore();
-  // corner hearts
-  [[PN.x, PN.y], [PN.x + PN.w, PN.y], [PN.x, PN.y + PN.h], [PN.x + PN.w, PN.y + PN.h]].forEach(([x, y], i) => drawPixelHeart(x, y, 5 + Math.sin(t * 4 + i) * .6, '#ff3b6b'));
+  const H = C.split, y0 = lerp(-H, 0, e);
+  ctx.drawImage(kissCv, 0, C.kissCropY * SC, WW * SC, H * SC, 0, y0, WW, H);
+  // divider between close-up (top) and bridge overview (bottom)
+  const dy = y0 + H;
+  const g = ctx.createLinearGradient(0, dy - 6, 0, dy + 6);
+  g.addColorStop(0, '#fff1a8'); g.addColorStop(.5, '#ffc93a'); g.addColorStop(1, '#c86a0c');
+  ctx.fillStyle = '#4a0f24'; ctx.fillRect(0, dy - 8, WW, 16);
+  ctx.fillStyle = g; ctx.fillRect(0, dy - 6, WW, 12);
+  for (let x = 40; x < WW; x += 110) drawPixelHeart(x, dy, 3 + Math.sin(t * 4 + x) * .4, '#ff3b6b');
   // ribbon title
   const tier = pair && pair.tier && cfg.tiers[pair.tier - 1];
   const title = pair && (pair.phase === 'showcase' || (pair.phase === 'out' && tier)) && tier ? '🎉 ' + tier.label + ' 🎉'
     : pair && pair.chain ? '💋 Hôn liền ' + pair.idx + '/' + pair.total + ' 💋' : (K.panelTitle || '💋 Nụ hôn trên cầu 💋');
   ctx.font = '800 34px B2, sans-serif';
-  const tw = Math.min(PN.w - 80, ctx.measureText(title).width + 70), ty = PN.y + 2;
+  const tw = Math.min(WW - 80, ctx.measureText(title).width + 70), ty = y0 + 40, cx = WW / 2;
   ctx.fillStyle = '#4a0f24'; rrect(cx - tw / 2 - 4, ty - 30, tw + 8, 60, 30); ctx.fill();
   ctx.fillStyle = '#b3123f'; rrect(cx - tw / 2, ty - 26, tw, 52, 26); ctx.fill();
   ctx.lineWidth = 3; ctx.strokeStyle = '#ffd34d'; ctx.stroke();
   txt(fitText(title, 32, tw - 30), cx, ty + 1, 32, '#ffe066', 'center', '#4a0f24', 7);
-  ctx.restore();
 }
 
 function kissLayout(p, side) {
@@ -898,7 +884,7 @@ function drawChat() {
   ctx.restore();
 }
 function drawToasts(dt) {
-  let y = lerp(530, 905, ease(clamp(panelA, 0, 1)));
+  let y = lerp(530, camOf().toastY, camE());
   for (let i = toasts.length - 1; i >= 0; i--) {
     const t = toasts[i]; t.t += dt;
     if (t.t > t.dur) { toasts.splice(i, 1); continue; }
@@ -930,8 +916,12 @@ function frame() {
   updHearts(dt); updPanel(dt);
   ctx.setTransform(SC, 0, 0, SC, 0, 0);
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-  drawBridge();
-  drawHearts(false);
+  {                                                // camera: bridge overview slides into the bottom half while kissing
+    const C = camOf(), e = camE(), sc = lerp(1, C.scale, e), ty = lerp(0, C.split - C.camTop * C.scale, e);
+    ctx.save(); ctx.translate(WW / 2 * (1 - sc), ty); ctx.scale(sc, sc);
+    drawBridge(); drawHearts(false);
+    ctx.restore();
+  }
   drawKissPanel();
   drawChat();
   drawToasts(dt);
@@ -1026,6 +1016,25 @@ function handleCmd(c) {
   }
 }
 
+const RULES_V3 = {
+  schema: 3,
+  bridge: {
+    leftPath: [[215, 1228], [190, 1190], [150, 1120], [110, 1050], [90, 1000], [100, 950], [125, 900], [172, 850], [212, 800], [212, 760], [178, 720], [128, 680], [95, 640], [100, 605], [150, 585], [250, 575], [350, 563], [420, 557], [452, 556]],
+    rightPath: [[730, 1228], [745, 1185], [765, 1130], [790, 1070], [818, 1010], [841, 950], [816, 900], [769, 850], [729, 800], [729, 760], [763, 720], [813, 680], [846, 640], [841, 605], [791, 585], [691, 575], [591, 563], [521, 557], [489, 556]],
+    nearY: 1228, farY: 556, farScale: 0.32, charH: 100, nameSize: 19
+  },
+  yard: { topY: 1245, bottomY: 1640, topX0: 230, topX1: 711, bottomX0: 120, bottomX1: 821, midGap: 30, charTop: 82, charBottom: 138, maxShow: 14, walkSpeed: 40, flySec: 1, flyHeight: 170 },
+  boards: { guide: { x: 346, y: 898, w: 252, h: 160 }, guideBg: '#6a1222', guideLines: [
+    'Vào live → ra sân chờ',
+    'Comment/Follow/Share → lên cầu',
+    '1 tim = 1 bước · {steps} bước',
+    '{idle}s không thả tim → rời cầu',
+    '{t1}xu x{s1} · {t2}xu x{s2} · {t3}xu x{s3}',
+    '{t4} xu: hôn liền {c4} người 💋'
+  ] },
+  kiss: { cam: { split: 836, camTop: 520, scale: 1, kissCropY: 520, toastY: 1560 } },
+  chat: { x: 620, y: 240, w: 310, h: 280, kissX: 300, kissY: 900, kissW: 340, kissH: 205 }
+};
 // one-time settings migration for the new rules (runs inside hot-updated content, no new exe needed)
 const NEW_RULES = {
   schema: 2,
@@ -1059,6 +1068,7 @@ const NEW_RULES = {
 (async function boot() {
   cfg = await API.getSettings();
   if ((cfg.schema || 0) < 2) { cfg = await API.setSettings(NEW_RULES); log('Đã chuyển sang luật chơi mới (sân chờ + thả tim)'); }
+  if ((cfg.schema || 0) < 3) { cfg = await API.setSettings(RULES_V3); log('Đã chuyển sang bối cảnh mới (quảng trường + camera chia đôi)'); }
   rebuildPaths();
   await Promise.all(['800 20px B2', '20px PX'].map(f => document.fonts.load(f, 'Aàáạ')));
   await loadAssets();

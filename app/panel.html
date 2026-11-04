@@ -163,20 +163,20 @@
     <div class="row"><label>Đứng trong khung (s)</label><input type="number" step="0.5" data-k="timing.showcaseSec"></div>
   </div>
   <div class="card"><h3>Cầu</h3>
-    <div class="row"><label>Cao nhân vật (gần)</label><input type="number" data-k="bridge.charH"></div>
+    <div class="row"><label>Cao nhân vật (chân cầu)</label><input type="number" data-k="bridge.charH"></div>
     <div class="row"><label>Tỉ lệ ở giữa cầu</label><input type="number" step="0.05" data-k="bridge.farScale"></div>
     <div class="row"><label>Cỡ tên</label><input type="number" data-k="bridge.nameSize"></div>
     <div class="row"><input type="checkbox" data-k="bridge.showPath"> Hiện đường đi (để chỉnh)</div>
     <div class="row"><label>Đường trái [[x,y],…]</label></div><textarea id="pathL"></textarea>
     <div class="row"><label>Đường phải</label></div><textarea id="pathR"></textarea>
     <div class="row"><button class="b" id="btnPath">Lưu đường đi</button><button class="b" data-reset="bridge">Mặc định</button></div>
-    <div class="hint">Toạ độ theo ảnh nền 941×1672. Điểm cuối là giữa cầu.</div>
+    <div class="hint">Toạ độ theo ảnh nền 941×1670. Điểm đầu là chân cầu, điểm cuối là giữa cầu.</div>
   </div>
   <div class="card"><h3>Cảnh hôn</h3>
     <div class="row"><label>Tiêu đề khung hôn</label><input type="text" data-k="kiss.panelTitle"></div>
-    <div class="row"><label>Khung: X / Y</label><input type="number" data-k="kiss.panel.x"><input type="number" data-k="kiss.panel.y"></div>
-    <div class="row"><label>Khung: Rộng / Cao</label><input type="number" data-k="kiss.panel.w"><input type="number" data-k="kiss.panel.h"></div>
-    <div class="row"><label>Cắt cảnh từ y</label><input type="number" data-k="kiss.panel.cropY"></div>
+    <div class="row"><label>Camera: chia màn ở y</label><input type="number" data-k="kiss.cam.split"> <span class="hint">836 = nửa màn hình</span></div>
+    <div class="row"><label>Toàn cảnh cầu: từ y / zoom</label><input type="number" data-k="kiss.cam.camTop"><input type="number" step="0.05" data-k="kiss.cam.scale"></div>
+    <div class="row"><label>Cận cảnh hôn: cắt từ y</label><input type="number" data-k="kiss.cam.kissCropY"></div>
     <div class="row"><label>Cao nhân vật</label><input type="number" data-k="kiss.charH"></div>
     <div class="row"><label>Chân ở y</label><input type="number" data-k="kiss.feetY"></div>
     <div class="row"><label>Khe môi</label><input type="number" data-k="kiss.lipGap"></div>
@@ -187,10 +187,14 @@
     <div class="row"><label>Tâm khung y</label><input type="number" data-k="kiss.frameY"></div>
     <div class="row"><button class="b" data-reset="kiss">Mặc định</button></div>
   </div>
-  <div class="card"><h3>Sân chờ</h3>
-    <div class="row"><label>Cao nhân vật / hiện tối đa</label><input type="number" data-k="yard.charH"><input type="number" data-k="yard.maxShow"></div>
-    <div class="row"><label>Trái: X / Y / Rộng / Cao</label><input type="number" data-k="yard.L.x" style="width:60px"><input type="number" data-k="yard.L.y" style="width:60px"><input type="number" data-k="yard.L.w" style="width:60px"><input type="number" data-k="yard.L.h" style="width:60px"></div>
-    <div class="row"><label>Phải: X / Y / Rộng / Cao</label><input type="number" data-k="yard.R.x" style="width:60px"><input type="number" data-k="yard.R.y" style="width:60px"><input type="number" data-k="yard.R.w" style="width:60px"><input type="number" data-k="yard.R.h" style="width:60px"></div>
+  <div class="card"><h3>Sân chờ (quảng trường)</h3>
+    <div class="row"><label>Mép trên: y / x trái / x phải</label><input type="number" data-k="yard.topY" style="width:60px"><input type="number" data-k="yard.topX0" style="width:60px"><input type="number" data-k="yard.topX1" style="width:60px"></div>
+    <div class="row"><label>Mép dưới: y / x trái / x phải</label><input type="number" data-k="yard.bottomY" style="width:60px"><input type="number" data-k="yard.bottomX0" style="width:60px"><input type="number" data-k="yard.bottomX1" style="width:60px"></div>
+    <div class="row"><label>Cao nhân vật xa / gần</label><input type="number" data-k="yard.charTop"><input type="number" data-k="yard.charBottom"></div>
+    <div class="row"><label>Hiện tối đa mỗi bên</label><input type="number" data-k="yard.maxShow"></div>
+    <div class="row"><label>Tốc độ đi lang thang</label><input type="number" data-k="yard.walkSpeed"></div>
+    <div class="row"><label>Bay lên cầu: thời gian (s) / độ cao</label><input type="number" step="0.1" data-k="yard.flySec"><input type="number" data-k="yard.flyHeight"></div>
+    <div class="hint">Bật "Hiện đường đi" để thấy khung sân chờ (nét vàng).</div>
   </div>
   <div class="card"><h3>Bảng chat (góc trên phải)</h3>
     <div class="row"><input type="checkbox" data-k="chat.show"> Hiện chat</div>
@@ -200,10 +204,6 @@
     <div class="row"><label>Khi đang hôn: X / Y</label><input type="number" data-k="chat.kissX"><input type="number" data-k="chat.kissY"></div>
     <div class="row"><label>Khi đang hôn: Rộng / Cao</label><input type="number" data-k="chat.kissW"><input type="number" data-k="chat.kissH"></div>
     <div class="row"><label>Độ mờ nền</label><input type="range" min="0" max="0.8" step="0.05" data-k="chat.bgAlpha"><span data-show="chat.bgAlpha"></span></div>
-  </div>
-  <div class="card"><h3>Bảng hàng chờ</h3>
-    <div class="row"><label>Cỡ chữ</label><input type="number" data-k="boards.fontSize"></div>
-    <div class="row"><label>Dòng đầu y / cao dòng</label><input type="number" data-k="boards.firstRowY"><input type="number" step="0.5" data-k="boards.rowH"></div>
   </div>
 </section>
 
