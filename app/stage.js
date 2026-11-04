@@ -1068,6 +1068,7 @@ const RULES_V4 = {
   boards: { guide: { x: 298, y: 902, w: 348, h: 234 }, guideBg: '#6c0f1e' },
   sfx: { files: { join: '', fly: '', kiss: '', gift: '', fanfare: '', poof: '' }, vols: { join: 1, fly: 1, kiss: 1, gift: 1, fanfare: 1, poof: 1 } }
 };
+const RULES_V5 = { schema: 5, boards: { guide: { x: 286, y: 903, w: 366, h: 242 }, guideBg: '#6e101c' } };
 // one-time settings migration for the new rules (runs inside hot-updated content, no new exe needed)
 const NEW_RULES = {
   schema: 2,
@@ -1106,6 +1107,11 @@ const NEW_RULES = {
     const patch = JSON.parse(JSON.stringify(RULES_V4));
     if (/\{side\}|bên \{side\}/.test(cfg.voice.welcomeTpl || '')) patch.voice = { welcomeTpl: cfg.voice.welcomeTpl.replace(/,?\s*bạn xếp hàng bên \{side\}/, '').replace('{side}', '') };
     cfg = await API.setSettings(patch); log('Đã cập nhật: sân chờ chung, âm thanh tuỳ chỉnh, bảng hướng dẫn lớn');
+  }
+  if ((cfg.schema || 0) < 5) {
+    const patch = JSON.parse(JSON.stringify(RULES_V5));
+    if ((cfg.chat.y || 0) < 300) patch.chat = { y: 305 };            // tiêu đề "Kissing Island" cao hơn
+    cfg = await API.setSettings(patch); log('Đã đổi ảnh nền Kissing Island');
   }
   rebuildPaths();
   await Promise.all(['800 20px B2', '20px PX'].map(f => document.fonts.load(f, 'Aàáạ')));
