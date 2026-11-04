@@ -26,6 +26,7 @@ function fill() {
   if (document.activeElement !== $('#guide')) $('#guide').value = (S.boards.guideLines || []).join('\n');
   if (document.activeElement !== $('#pathL')) $('#pathL').value = JSON.stringify(S.bridge.leftPath);
   if (document.activeElement !== $('#pathR')) $('#pathR').value = JSON.stringify(S.bridge.rightPath);
+  $$('[data-arr]').forEach(el => { if (document.activeElement !== el) el.value = (get(S, el.dataset.arr) || []).join('\n'); });
   $('#musicName').textContent = S.music.file ? S.music.file.split(/[\\/]/).pop() : '(không có)';
   renderTiers();
   renderGiftBtns();
@@ -72,6 +73,7 @@ function renderGiftBtns() {
   $('#giftBtns').innerHTML = mk(false); $('#giftBtns2').innerHTML = mk(true);
 }
 
+$$('[data-arr]').forEach(el => el.addEventListener('change', () => set(el.dataset.arr, el.value.split('\n').map(x => x.trim()).filter(Boolean))));
 $('#guide').onchange = () => API.setSettings({ boards: { guideLines: $('#guide').value.split('\n').map(s => s.trim()).filter(Boolean) } }).then(s => S = s);
 $('#btnPath').onclick = () => {
   try { const L = JSON.parse($('#pathL').value), R = JSON.parse($('#pathR').value); API.setSettings({ bridge: { leftPath: L, rightPath: R } }).then(s => { S = s; log('Đã lưu đường đi'); }); }

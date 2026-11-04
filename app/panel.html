@@ -152,6 +152,14 @@
     <div class="row"><label>Chúc mừng khung donate</label></div><textarea data-k="voice.donorTpl"></textarea>
     <div class="hint">Biến: <code>{name}</code> <code>{side}</code> <code>{a}</code> <code>{b}</code> <code>{gift}</code> <code>{speed}</code> <code>{n}</code> <code>{frame}</code></div>
   </div>
+  <div class="card"><h3>Giọng đọc tiếng Anh (khi màn live là English)</h3>
+    <div class="row"><label>Giọng</label><select data-k="en.voice.voice"><option value="en-US-JennyNeural">Jenny (nữ, Mỹ)</option><option value="en-US-AriaNeural">Aria (nữ, Mỹ)</option><option value="en-US-GuyNeural">Guy (nam, Mỹ)</option><option value="en-GB-SoniaNeural">Sonia (nữ, Anh)</option><option value="en-GB-RyanNeural">Ryan (nam, Anh)</option></select></div>
+    <div class="row"><label>Câu chào</label></div><textarea data-k="en.voice.welcomeTpl"></textarea>
+    <div class="row"><label>Chúc mừng khi hôn</label></div><textarea data-k="en.voice.congratsTpl"></textarea>
+    <div class="row"><label>Cảm ơn quà</label></div><textarea data-k="en.voice.giftTpl"></textarea>
+    <div class="row"><label>Cảm ơn quà hôn liền</label></div><textarea data-k="en.voice.chainTpl"></textarea>
+    <div class="row"><label>Chúc mừng khung donate</label></div><textarea data-k="en.voice.donorTpl"></textarea>
+  </div>
   <div class="card"><h3>Âm thanh tuỳ chỉnh</h3>
     <table id="sounds"></table>
     <div class="hint">Chọn file .mp3/.wav/.ogg của bạn cho từng âm. "Mặc định" = dùng lại âm 8-bit có sẵn. Kéo âm lượng về 0 để tắt riêng âm đó.</div>
@@ -165,6 +173,24 @@
 
 <!-- DISPLAY -->
 <section id="t-display">
+  <div class="card"><h3>Ngôn ngữ màn live</h3>
+    <div class="row"><label>Ngôn ngữ</label><select data-k="lang"><option value="vi">Tiếng Việt</option><option value="en">English</option></select></div>
+    <div class="hint">Đổi toàn bộ chữ trên màn live, bảng hướng dẫn, tên khung, dải chữ chạy và giọng đọc. Bảng điều khiển vẫn là tiếng Việt.</div>
+  </div>
+  <div class="card"><h3>Dải chữ hướng dẫn chạy (mép trên)</h3>
+    <div class="row"><input type="checkbox" data-k="ticker.show"> Hiện dải chữ chạy</div>
+    <div class="row"><label>Tốc độ / cỡ chữ / cao</label><input type="number" data-k="ticker.speed"><input type="number" data-k="ticker.fontSize"><input type="number" data-k="ticker.h"></div>
+    <div class="row"><label>Vị trí y</label><input type="number" data-k="ticker.y"></div>
+    <div class="row"><label>Nội dung tiếng Việt</label></div><textarea data-k="ticker.text" placeholder="để trống = dùng nội dung mặc định theo luật chơi"></textarea>
+    <div class="row"><label>Nội dung tiếng Anh</label></div><textarea data-k="en.ticker"></textarea>
+    <div class="hint">Biến: <code>{steps}</code> <code>{idle}</code> <code>{t1}</code>…<code>{t4}</code> <code>{s1}</code>…<code>{s3}</code> <code>{c4}</code></div>
+  </div>
+  <div class="card"><h3>Nội dung tiếng Anh</h3>
+    <div class="row"><label>Tiêu đề bảng hướng dẫn</label><input type="text" data-k="en.guideTitle"></div>
+    <div class="row"><label>Các dòng hướng dẫn (mỗi dòng 1 mục)</label></div><textarea data-arr="en.guideLines" style="min-height:110px"></textarea>
+    <div class="row"><label>Tên khung theo mức (mỗi dòng 1 mức)</label></div><textarea data-arr="en.tierLabels"></textarea>
+    <div class="row"><label>Tiêu đề cảnh hôn</label><input type="text" data-k="en.panelTitle" placeholder="để trống = 💋 A Kiss on the Bridge 💋"></div>
+  </div>
   <div class="card"><h3>Cửa sổ live (9:16)</h3>
     <div class="row"><button class="b" data-size="405x720">405×720</button><button class="b" data-size="540x960">540×960</button><button class="b" data-size="720x1280">720×1280</button><button class="b" data-size="1080x1920">1080×1920</button></div>
     <div class="row"><input type="checkbox" data-k="window.alwaysOnTop"> Luôn ở trên cùng <button class="b" id="btnFull">Toàn màn hình</button><button class="b" id="btnReload">Tải lại màn live</button></div>

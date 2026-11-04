@@ -169,6 +169,44 @@ function makePath(pts) {
 let PATH = { L: null, R: null };
 function rebuildPaths() { PATH.L = makePath(cfg.bridge.leftPath); PATH.R = makePath(cfg.bridge.rightPath); }
 
+// ---------------------------------------------------------------- language (vi / en)
+const STR = {
+  vi: {
+    joinYard: '👋 {name} vào sân chờ', onBridge: '🌉 {name} lên cầu {side} · thả tim để bước!', idle: '⌛ {name} rời cầu vì không thả tim',
+    gift: '🎁 {name} tặng {gift}{count}{extra}', giftChain: ' → 💋 Hôn liền {n} người!', giftSpeed: ' → ⚡ tốc độ x{speed}', times: ' {n} lần',
+    left: 'TRÁI', right: 'PHẢI', waitMatch: 'Chờ nửa kia 💗', likeToWalk: '❤ thả tim để bước', idleLeft: '⏳{n}s · thả tim!',
+    moreYard: '+{n} người ở sân chờ', panelTitle: '💋 Nụ hôn trên cầu 💋', streak: '💋 Hôn liền {i}/{n} 💋'
+  },
+  en: {
+    joinYard: '👋 {name} joined the plaza', onBridge: '🌉 {name} is on the {side} bridge · send likes to walk!', idle: '⌛ {name} left the bridge (no likes)',
+    gift: '🎁 {name} sent {gift}{count}{extra}', giftChain: ' → 💋 Kiss {n} in a row!', giftSpeed: ' → ⚡ speed x{speed}', times: ' x{n}',
+    left: 'LEFT', right: 'RIGHT', waitMatch: 'Waiting for a match 💗', likeToWalk: '❤ send likes to walk', idleLeft: '⏳{n}s · send likes!',
+    moreYard: '+{n} more in the plaza', panelTitle: '💋 A Kiss on the Bridge 💋', streak: '💋 Kiss streak {i}/{n} 💋'
+  }
+};
+const EN_DEFAULTS = {
+  guideTitle: 'HOW TO PLAY',
+  guideLines: ['Join the LIVE → enter the plaza', 'Comment/Follow/Share → hop on', '1 like = 1 step · {steps} steps', 'No likes for {idle}s → you leave',
+    '{t1}c x{s1} · {t2}c x{s2} · {t3}c x{s3}', '{t4} coins: kiss {c4} in a row 💋'],
+  tierLabels: ['Pink Heart Frame', 'Blue Diamond Frame', 'Royal Frame', 'Wedding Arch'],
+  panelTitle: '',
+  ticker: '💕 HOW TO PLAY: Join the LIVE to enter the plaza  •  Comment, Follow or Share to get on the bridge  •  1 like = 1 step, {steps} steps to the middle  •  No likes for {idle}s and you leave the bridge  •  Meet your match in the middle and KISS 💋  •  Gifts boost your speed: {t1} coin x{s1} · {t2} coins x{s2} · {t3} coins x{s3}  •  {t4} coins = kiss {c4} people in a row!',
+  voice: {
+    voice: 'en-US-JennyNeural',
+    welcomeTpl: 'Welcome {name}! Comment to get on the bridge, then send likes to walk.',
+    congratsTpl: 'Congratulations {a} and {b} on your kiss on the bridge!',
+    giftTpl: 'Thank you {name} for the {gift}! You are now {speed} times faster.',
+    chainTpl: 'Wow! Thank you {name} for the {gift}! {name} gets to kiss {n} people in a row!',
+    donorTpl: 'Congratulations {a} and {b}, you earned the {frame}!'
+  }
+};
+const VI_TICKER = '💕 CÁCH CHƠI: Vào live để ra sân chờ  •  Comment, Follow hoặc Share để lên cầu  •  Thả tim: 1 tim = 1 bước, {steps} bước tới giữa cầu  •  {idle} giây không thả tim sẽ rời cầu  •  Gặp nửa kia ở giữa cầu và HÔN 💋  •  Tặng quà để tăng tốc: {t1} xu x{s1} · {t2} xu x{s2} · {t3} xu x{s3}  •  {t4} xu = hôn liền {c4} người!';
+const isEN = () => cfg && cfg.lang === 'en';
+const EN = () => Object.assign({}, EN_DEFAULTS, cfg.en || {}, { voice: Object.assign({}, EN_DEFAULTS.voice, (cfg.en || {}).voice || {}) });
+function S(k, v = {}) { return tpl((isEN() ? STR.en : STR.vi)[k], v); }
+function tierLabel(t) { if (!t) return ''; const i = cfg.tiers.indexOf(t); return isEN() ? (EN().tierLabels[i] || t.label) : t.label; }
+function voiceCfg() { return isEN() ? Object.assign({}, cfg.voice, EN().voice) : cfg.voice; }
+
 // ---------------------------------------------------------------- state
 // Every viewer is a person. state: 'yard' (sân chờ) | 'bridge' (đang đi) | 'center' (đứng chờ giữa cầu) | 'kiss'
 const PEOPLE = new Map();
@@ -186,7 +224,7 @@ const G = () => cfg.game;
 const all = () => [...PEOPLE.values()];
 const onSide = (side, states) => all().filter(p => p.side === side && states.includes(p.state));
 const other = s => s === 'L' ? 'R' : 'L';
-const sideName = s => s === 'L' ? 'TRÁI' : 'PHẢI';
+const sideName = s => s === 'L' ? S('left') : S('right');
 function stepLen(side) { return PATH[side].len / Math.max(1, G().steps); }
 function tierFor(coins) { let t = 0; (cfg.tiers || []).forEach((x, i) => { if (coins >= x.coins) t = i + 1; }); return t; }
 const tierObj = p => cfg.tiers[p.tier - 1];
@@ -219,8 +257,8 @@ function ensurePerson(user, quiet) {
   PEOPLE.set(p.id, p);
   pruneYard();
   if (!quiet) {
-    toast('👋 ' + shortName(p.name, 18) + ' vào sân chờ', '#ffe7a8', 2.2);
-    if (cfg.voice.welcome) say(tpl(cfg.voice.welcomeTpl, { name: speakName(p.name), side: '' }), 'welcome');
+    toast(S('joinYard', { name: shortName(p.name, 18) }), '#ffe7a8', 2.2);
+    if (cfg.voice.welcome) say(tpl(voiceCfg().welcomeTpl, { name: speakName(p.name), side: '' }), 'welcome');
     sfx('join');
   }
   return p;
@@ -246,7 +284,7 @@ function toBridge(p, why, side) {
   if (p.wx == null || !p.vis) placeInYard(p);
   p.state = 'bridge'; p.steps = 0; p.d = 0; p.enterT = now(); p.lastLike = now() + cfg.yard.flySec; p.active = Date.now();
   p.fromX = p.x; p.fromY = p.y; p.flyK = 0;
-  toast('🌉 ' + shortName(p.name, 16) + ' lên cầu ' + sideName(p.side) + ' · thả tim để bước!', '#bfe9ff', 2.4);
+  toast(S('onBridge', { name: shortName(p.name, 16), side: sideName(p.side) }), '#bfe9ff', 2.4);
   sfx('fly');
   return true;
 }
@@ -254,7 +292,7 @@ function toYard(p, reason) {
   if (!p) return;
   if (reason === 'idle') {
     for (let i = 0; i < 6; i++) spawnHeart(p.x, p.y - 40, true);
-    toast('⌛ ' + shortName(p.name, 16) + ' rời cầu vì không thả tim', '#ffc2c2', 2.4);
+    toast(S('idle', { name: shortName(p.name, 16) }), '#ffc2c2', 2.4);
     sfx('poof');
   }
   p.state = 'yard'; p.side = null; p.steps = 0; p.d = 0; p.dash = false; p.arriveSeq = 0; p.flyK = 1;
@@ -306,9 +344,10 @@ function onGift(user, coins, giftName, count) {
     if (p.state === 'bridge') { p.dash = true; arrive(p); }          // chạy thẳng ra giữa cầu
   }
   if (pair && (pair.a === p || pair.b === p) && pair.phase !== 'showcase' && pair.phase !== 'out') pair.tier = Math.max(pair.a.tier, pair.b.tier);
-  const extra = t ? (t.chain ? ' → 💋 Hôn liền ' + t.chain + ' người!' : ' → ⚡ tốc độ x' + t.speed) : '';
-  toast('🎁 ' + shortName(p.name, 16) + ' tặng ' + giftName + (count > 1 ? ' x' + count : '') + extra, '#ffd34d', 4, true);
-  say(tpl(t && t.chain ? cfg.voice.chainTpl || cfg.voice.giftTpl : cfg.voice.giftTpl, { name: speakName(p.name), gift: giftName + (count > 1 ? ' ' + count + ' lần' : ''), n: t && t.chain, speed: t && t.speed }), 'gift');
+  const extra = t ? (t.chain ? S('giftChain', { n: t.chain }) : S('giftSpeed', { speed: t.speed })) : '';
+  toast(S('gift', { name: shortName(p.name, 16), gift: giftName, count: count > 1 ? ' x' + count : '', extra }), '#ffd34d', 4, true);
+  const V = voiceCfg();
+  say(tpl(t && t.chain ? V.chainTpl || V.giftTpl : V.giftTpl, { name: speakName(p.name), gift: giftName + (count > 1 ? S('times', { n: count }) : ''), n: t && t.chain, speed: t && t.speed }), 'gift');
   sfx('gift');
   for (let i = 0; i < 12; i++) spawnHeart(p.x || WW / 2, (p.y || 900) - 60, true);
   if (p.tier > old) log(`${p.name} đạt mức ${p.tier} (${p.coins} xu)`);
@@ -350,7 +389,7 @@ async function pumpVoice() {
   speaking = true;
   const v = voiceQ.shift();
   try {
-    const r = await API.tts(v.text, cfg.voice);
+    const r = await API.tts(v.text, voiceCfg());
     if (r && r.b64) {
       audio.src = 'data:' + r.mime + ';base64,' + r.b64;
       audio.volume = clamp(cfg.voice.volume, 0, 1);
@@ -358,8 +397,8 @@ async function pumpVoice() {
       await audio.play();
       await new Promise(res => { audio.onended = res; audio.onerror = res; setTimeout(res, 20000); });
     } else if (r && r.system && 'speechSynthesis' in window) {
-      const u = new SpeechSynthesisUtterance(r.text); u.lang = 'vi-VN'; u.volume = cfg.voice.volume; u.rate = 1 + (cfg.voice.rate || 0) / 100;
-      const vv = speechSynthesis.getVoices().find(x => /vi/i.test(x.lang)); if (vv) u.voice = vv;
+      const u = new SpeechSynthesisUtterance(r.text); u.lang = isEN() ? 'en-US' : 'vi-VN'; u.volume = cfg.voice.volume; u.rate = 1 + (cfg.voice.rate || 0) / 100;
+      const vv = speechSynthesis.getVoices().find(x => (isEN() ? /^en/i : /vi/i).test(x.lang)); if (vv) u.voice = vv;
       duckMusic(true);
       await new Promise(res => { u.onend = res; u.onerror = res; speechSynthesis.speak(u); setTimeout(res, 20000); });
     }
@@ -679,18 +718,18 @@ function drawBridge() {
     if (tob && p.state === 'bridge') txt(tob.chain ? '💋x' + tob.chain : '⚡x' + tob.speed, p.x + 34, nameY - 16, 15, '#ffe066', 'center', '#4a0f24', 4);
     if (p.state === 'bridge') {
       const left = g.idleSec - (t - p.lastLike);
-      if (left < 5) txt('⏳' + Math.ceil(left) + 's · thả tim!', p.x, nameY - 20, 15, '#ffb0b0', 'center', '#4a0f24', 4);
-      else if (t - p.enterT < 3 + Y.flySec && p.steps === 0) txt('❤ thả tim để bước', p.x, nameY - 20, 15, '#ffe0ec', 'center', '#4a0f24', 4);
+      if (left < 5) txt(S('idleLeft', { n: Math.ceil(left) }), p.x, nameY - 20, 15, '#ffb0b0', 'center', '#4a0f24', 4);
+      else if (t - p.enterT < 3 + Y.flySec && p.steps === 0) txt(S('likeToWalk'), p.x, nameY - 20, 15, '#ffe0ec', 'center', '#4a0f24', 4);
     }
     if (p.state === 'center' && p.cIdx === 0 && !onSide(other(p.side), ['center']).length && !p.chain) {
       ctx.globalAlpha = .9 + Math.sin(t * 4) * .1;
-      txt('Chờ nửa kia 💗', p.x + (p.side === 'L' ? -10 : 10), nameY - 20, 16, '#ffe0ec', 'center', '#4a0f24', 4);
+      txt(S('waitMatch'), p.x + (p.side === 'L' ? -10 : 10), nameY - 20, 16, '#ffe0ec', 'center', '#4a0f24', 4);
       ctx.globalAlpha = 1;
     }
   }
   for (const s of sparkles) if (s.w) drawSparkle(s.x, s.y, 8 * Math.sin(s.t / .8 * Math.PI), Math.sin(s.t / .8 * Math.PI));
   { const hidden = all().filter(p => p.state === 'yard').length - Y.maxShow;
-    if (hidden > 0) txt('+' + hidden + ' người ở sân chờ', WW / 2, Y.bottomY + 10, 18, '#ffe066', 'center', '#4a0f24', 4); }
+    if (hidden > 0) txt(S('moreYard', { n: hidden }), WW / 2, Y.bottomY + 10, 18, '#ffe066', 'center', '#4a0f24', 4); }
   if (cfg.bridge.showPath) {
     for (const side of ['L', 'R']) {
       ctx.strokeStyle = side === 'L' ? '#0f0' : '#0ff'; ctx.lineWidth = 3; ctx.beginPath();
@@ -712,8 +751,16 @@ function drawGuide() {
   const B = cfg.boards, R = B.guide || { x: 346, y: 898, w: 252, h: 160 };
   ctx.fillStyle = B.guideBg || '#6a1222';
   rrect(R.x, R.y, R.w, R.h, 6); ctx.fill();
+  const title = isEN() ? EN().guideTitle : B.guideTitle;
+  if (title) {
+    const TR = B.guideTitleRect || { x: 340, y: 821, w: 262, h: 80 };
+    ctx.fillStyle = B.guideBg || '#6e101c'; rrect(TR.x, TR.y, TR.w, TR.h, 8); ctx.fill();
+    let fs = 44; ctx.font = '800 ' + fs + 'px B2, sans-serif';
+    while (fs > 20 && ctx.measureText(title).width > TR.w - 10) { fs--; ctx.font = '800 ' + fs + 'px B2, sans-serif'; }
+    txt(title, TR.x + TR.w / 2, TR.y + TR.h / 2 + 2, fs, '#ffd84a', 'center', '#3a0610', 7);
+  }
   const vars = guideVars();
-  const lines = (B.guideLines || []).map(l => tpl(l, vars));
+  const lines = ((isEN() ? EN().guideLines : B.guideLines) || []).map(l => tpl(l, vars));
   const n = lines.length || 1, h = R.h / n, tw = R.w - 34;
   lines.forEach((l, i) => {
     const y = R.y + h * i + h / 2;
@@ -780,10 +827,10 @@ function drawKissPanel() {
   for (let x = 40; x < WW; x += 110) drawPixelHeart(x, dy, 3 + Math.sin(t * 4 + x) * .4, '#ff3b6b');
   // ribbon title
   const tier = pair && pair.tier && cfg.tiers[pair.tier - 1];
-  const title = pair && (pair.phase === 'showcase' || (pair.phase === 'out' && tier)) && tier ? '🎉 ' + tier.label + ' 🎉'
-    : pair && pair.chain ? '💋 Hôn liền ' + pair.idx + '/' + pair.total + ' 💋' : (K.panelTitle || '💋 Nụ hôn trên cầu 💋');
+  const title = pair && (pair.phase === 'showcase' || (pair.phase === 'out' && tier)) && tier ? '🎉 ' + tierLabel(tier) + ' 🎉'
+    : pair && pair.chain ? S('streak', { i: pair.idx, n: pair.total }) : ((isEN() ? EN().panelTitle : K.panelTitle) || S('panelTitle'));
   ctx.font = '800 34px B2, sans-serif';
-  const tw = Math.min(WW - 80, ctx.measureText(title).width + 70), ty = y0 + 40, cx = WW / 2;
+  const tw = Math.min(WW - 80, ctx.measureText(title).width + 70), ty = y0 + 40 + ((cfg.ticker || {}).show === false ? 0 : ((cfg.ticker || {}).h || 44) + 4), cx = WW / 2;
   ctx.fillStyle = '#4a0f24'; rrect(cx - tw / 2 - 4, ty - 30, tw + 8, 60, 30); ctx.fill();
   ctx.fillStyle = '#b3123f'; rrect(cx - tw / 2, ty - 26, tw, 52, 26); ctx.fill();
   ctx.lineWidth = 3; ctx.strokeStyle = '#ffd34d'; ctx.stroke();
@@ -812,7 +859,7 @@ function updKiss(dt) {
     const la = kissLayout(P.a, 'L');
     for (let i = 0; i < 10; i++) spawnHeart(WW / 2, la.lipY, true, true);
     spawnOrbitHearts(WW / 2, la.lipY + 120, K.hearts);
-    if (!P.chain || P.idx === 1) say(tpl(cfg.voice.congratsTpl, { a: speakName(P.a.name), b: speakName(P.b.name) }), 'congrats');
+    if (!P.chain || P.idx === 1) say(tpl(voiceCfg().congratsTpl, { a: speakName(P.a.name), b: speakName(P.b.name) }), 'congrats');
   } else if (P.phase === 'kiss') {
     if (P.t > 1.6 && !P.k2) { P.k2 = true; sfx('kiss'); }
     if (Math.random() < dt * 3) { const la = kissLayout(P.a, 'L'); spawnHeart(WW / 2 + rand(-30, 30), la.lipY - 20, false, Math.random() < .3); }
@@ -831,7 +878,7 @@ function updKiss(dt) {
       if (P.tier && tier) {
         P.phase = 'showcase'; P.t = 0; sfx('fanfare');
         for (let i = hearts.length - 1; i >= 0; i--) if (hearts[i].orbit) hearts.splice(i, 1);
-        say(tpl(cfg.voice.donorTpl, { a: speakName(P.a.name), b: speakName(P.b.name), frame: tier.label }), 'congrats');
+        say(tpl(voiceCfg().donorTpl, { a: speakName(P.a.name), b: speakName(P.b.name), frame: tierLabel(tier) }), 'congrats');
       } else { P.phase = 'out'; endKiss(); }
     }
   } else if (P.phase === 'showcase') {
@@ -952,6 +999,25 @@ function drawChat() {
   }
   ctx.restore();
 }
+// ---- dải chữ hướng dẫn chạy ngang ở mép trên
+let tickerX = null;
+function drawTicker(dt) {
+  const T = cfg.ticker || {}; if (T.show === false) return;
+  const raw = isEN() ? EN().ticker : (T.text || VI_TICKER);
+  const text = tpl(raw, guideVars()), h = T.h || 44, fs = T.fontSize || 24, y = T.y || 0;
+  ctx.save();
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, 'rgba(90,10,40,.82)'); g.addColorStop(1, 'rgba(60,6,28,.82)');
+  ctx.fillStyle = g; ctx.fillRect(0, y, WW, h);
+  ctx.fillStyle = '#ffc93a'; ctx.fillRect(0, y + h - 3, WW, 3);
+  ctx.font = '800 ' + fs + 'px B2, sans-serif';
+  const w = ctx.measureText(text).width, gap = 120;
+  if (tickerX == null || tickerX < -w - gap) tickerX = tickerX == null ? WW : tickerX + w + gap;
+  tickerX -= (T.speed || 90) * dt;
+  ctx.beginPath(); ctx.rect(0, y, WW, h); ctx.clip();
+  for (let x = tickerX; x < WW; x += w + gap) txt(text, x, y + h / 2 + 1, fs, '#ffe9a8', 'left', '#2a0712', 4);
+  ctx.restore();
+}
 function drawToasts(dt) {
   let y = lerp(530, camOf().toastY, camE());
   for (let i = toasts.length - 1; i >= 0; i--) {
@@ -994,6 +1060,7 @@ function frame() {
   drawKissPanel();
   drawChat();
   drawToasts(dt);
+  drawTicker(dt);
   stateT += dt; persistT += dt;
   if (stateT > .5) { stateT = 0; pushState(); }
   if (persistT > 3) { persistT = 0; persist(); }
@@ -1142,6 +1209,7 @@ const RULES_V4 = {
   sfx: { files: { join: '', fly: '', kiss: '', gift: '', fanfare: '', poof: '' }, vols: { join: 1, fly: 1, kiss: 1, gift: 1, fanfare: 1, poof: 1 } }
 };
 const RULES_V5 = { schema: 5, boards: { guide: { x: 286, y: 903, w: 366, h: 242 }, guideBg: '#6e101c' } };
+const RULES_V6 = { schema: 6, lang: 'vi', ticker: { show: true, text: '', speed: 90, h: 44, fontSize: 24, y: 0 }, en: JSON.parse(JSON.stringify(EN_DEFAULTS)), boards: { guideTitleRect: { x: 340, y: 821, w: 262, h: 80 } } };
 // one-time settings migration for the new rules (runs inside hot-updated content, no new exe needed)
 const NEW_RULES = {
   schema: 2,
@@ -1186,6 +1254,7 @@ const NEW_RULES = {
     if ((cfg.chat.y || 0) < 300) patch.chat = { y: 305 };            // tiêu đề "Kissing Island" cao hơn
     cfg = await API.setSettings(patch); log('Đã đổi ảnh nền Kissing Island');
   }
+  if ((cfg.schema || 0) < 6) { cfg = await API.setSettings(RULES_V6); log('Đã thêm: màn live tiếng Anh + dải chữ hướng dẫn chạy'); }
   rebuildPaths();
   await Promise.all(['800 20px B2', '20px PX'].map(f => document.fonts.load(f, 'Aàáạ')));
   await loadAssets();
