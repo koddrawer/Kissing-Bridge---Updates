@@ -118,7 +118,7 @@
   </div>
   <div class="card"><h3>Âm thanh</h3>
     <div class="row"><button class="b" data-cmd='{"type":"sfx","name":"kiss"}'>💋 Tiếng hôn</button><button class="b" data-cmd='{"type":"sfx","name":"gift"}'>🎁 Quà</button><button class="b" data-cmd='{"type":"sfx","name":"fanfare"}'>🎺 Khung</button><button class="b" data-cmd='{"type":"sfx","name":"join"}'>🔔 Vào</button></div>
-    <div class="row"><input type="text" id="sayText" value="Chúc mừng Ngọc Anh và Minh Tuấn, chúc hai bạn trăm năm hạnh phúc!"><button class="b" id="btnSay">🔊 Đọc</button></div>
+    <div class="row"><input type="text" id="sayText" placeholder="để trống = đọc câu mẫu theo ngôn ngữ màn live"><button class="b" id="btnSay">🔊 Đọc</button></div>
   </div>
 </section>
 
@@ -153,7 +153,8 @@
     <div class="hint">Biến: <code>{name}</code> <code>{side}</code> <code>{a}</code> <code>{b}</code> <code>{gift}</code> <code>{speed}</code> <code>{n}</code> <code>{frame}</code></div>
   </div>
   <div class="card"><h3>Giọng đọc tiếng Anh (khi màn live là English)</h3>
-    <div class="row"><label>Giọng</label><select data-k="en.voice.voice"><option value="en-US-JennyNeural">Jenny (nữ, Mỹ)</option><option value="en-US-AriaNeural">Aria (nữ, Mỹ)</option><option value="en-US-GuyNeural">Guy (nam, Mỹ)</option><option value="en-GB-SoniaNeural">Sonia (nữ, Anh)</option><option value="en-GB-RyanNeural">Ryan (nam, Anh)</option></select></div>
+    <div class="row"><label>Giọng</label><select data-k="en.voice.voice"><option value="en-GB-SoniaNeural">Sonia (nữ, Anh) ★</option><option value="en-GB-LibbyNeural">Libby (nữ, Anh)</option><option value="en-GB-MaisieNeural">Maisie (bé gái, Anh)</option><option value="en-GB-RyanNeural">Ryan (nam, Anh)</option><option value="en-GB-ThomasNeural">Thomas (nam, Anh)</option><option value="en-US-JennyNeural">Jenny (nữ, Mỹ)</option><option value="en-US-AriaNeural">Aria (nữ, Mỹ)</option><option value="en-US-GuyNeural">Guy (nam, Mỹ)</option><option value="en-AU-NatashaNeural">Natasha (nữ, Úc)</option></select> <button class="b s" data-cmd='{"type":"say"}'>🔊 Thử</button></div>
+    <div class="hint">Khi màn live là English, app dùng giọng này thay cho giọng tiếng Việt. Nhật ký (tab Live) ghi "🔊 Giọng đang đọc: …" để bạn kiểm tra.</div>
     <div class="row"><label>Câu chào</label></div><textarea data-k="en.voice.welcomeTpl"></textarea>
     <div class="row"><label>Chúc mừng khi hôn</label></div><textarea data-k="en.voice.congratsTpl"></textarea>
     <div class="row"><label>Cảm ơn quà</label></div><textarea data-k="en.voice.giftTpl"></textarea>

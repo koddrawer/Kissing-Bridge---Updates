@@ -192,7 +192,7 @@ const EN_DEFAULTS = {
   panelTitle: '',
   ticker: '💕 HOW TO PLAY: Join the LIVE to enter the plaza  •  Comment, Follow or Share to get on the bridge  •  1 like = 1 step, {steps} steps to the middle  •  No likes for {idle}s and you leave the bridge  •  Meet your match in the middle and KISS 💋  •  Gifts boost your speed: {t1} coin x{s1} · {t2} coins x{s2} · {t3} coins x{s3}  •  {t4} coins = kiss {c4} people in a row!',
   voice: {
-    voice: 'en-US-JennyNeural',
+    voice: 'en-GB-SoniaNeural',
     welcomeTpl: 'Welcome {name}! Comment to get on the bridge, then send likes to walk.',
     congratsTpl: 'Congratulations {a} and {b} on your kiss on the bridge!',
     giftTpl: 'Thank you {name} for the {gift}! You are now {speed} times faster.',
@@ -391,7 +391,10 @@ async function pumpVoice() {
   const v = voiceQ.shift();
   try {
     if (v.lang && v.lang !== (isEN() ? 'en' : 'vi')) throw new Error('skip');      // queued before the language switch
-    const r = await API.tts(v.text, voiceCfg());
+    const vc = voiceCfg();
+    const r = await API.tts(v.text, vc);
+    const used = r ? (r.engine === 'edge' ? 'Microsoft ' + vc.voice : r.engine === 'google' ? (isEN() ? 'Google English' : 'Google Tiếng Việt') : (isEN() ? 'Windows English' : 'Windows')) : '-';
+    if (used !== lastVoiceUsed) { lastVoiceUsed = used; log('🔊 Giọng đang đọc: ' + used); }
     if (isEN() && r && r.engine && r.engine !== 'edge') {
       // exe's Google fallback is hard-wired to Vietnamese → speak English via Google en / system en voice instead
       duckMusic(true);
@@ -411,6 +414,7 @@ async function pumpVoice() {
   speaking = false;
   setTimeout(pumpVoice, 150);
 }
+let lastVoiceUsed = '';
 function speakSystem(text) {
   if (!('speechSynthesis' in window)) return Promise.resolve(false);
   const u = new SpeechSynthesisUtterance(text); u.lang = isEN() ? 'en-US' : 'vi-VN'; u.volume = cfg.voice.volume; u.rate = 1 + (cfg.voice.rate || 0) / 100;
@@ -1205,7 +1209,7 @@ function handleCmd(c) {
       if (a && b) { a.state = 'center'; b.state = 'center'; startKiss(a, [b]); }
       break;
     }
-    case 'say': say(c.text, 'congrats'); break;
+    case 'say': say(c.text || (isEN() ? 'Congratulations Bella and Kevin, you two look perfect together!' : 'Chúc mừng Ngọc Anh và Minh Tuấn, chúc hai bạn trăm năm hạnh phúc!'), 'congrats'); break;
     case 'sfx': sfx(c.name); break;
     case 'event': handleEvent(c.ev); break;
   }
@@ -1284,11 +1288,17 @@ const NEW_RULES = {
     cfg = await API.setSettings(patch); log('Đã đổi ảnh nền Kissing Island');
   }
   if ((cfg.schema || 0) < 6) { cfg = await API.setSettings(RULES_V6); log('Đã thêm: màn live tiếng Anh + dải chữ hướng dẫn chạy'); }
+  if ((cfg.schema || 0) < 8 && (cfg.schema || 0) >= 7) {
+    const cur = cfg.en && cfg.en.voice && cfg.en.voice.voice;
+    cfg = await API.setSettings({ schema: 8, en: { voice: { voice: !cur || cur === 'en-US-JennyNeural' ? 'en-GB-SoniaNeural' : cur } } });
+  }
   if ((cfg.schema || 0) < 7) {
     const patch = { schema: 7 };
     if (!(cfg.ticker && cfg.ticker.y)) patch.ticker = { y: 294 };               // ngay dưới logo
     if ((cfg.chat.y || 0) < 350) patch.chat = { y: 352 };
     cfg = await API.setSettings(patch); log('Dải chữ chạy đã dời xuống dưới logo');
+    const cur = cfg.en && cfg.en.voice && cfg.en.voice.voice;
+    cfg = await API.setSettings({ schema: 8, en: { voice: { voice: !cur || cur === 'en-US-JennyNeural' ? 'en-GB-SoniaNeural' : cur } } });
   }
   rebuildPaths();
   await Promise.all(['800 20px B2', '20px PX'].map(f => document.fonts.load(f, 'Aàáạ')));
