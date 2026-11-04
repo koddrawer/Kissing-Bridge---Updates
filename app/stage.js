@@ -1028,14 +1028,45 @@ function restore(st) {
 }
 
 // ---------------------------------------------------------------- panel commands
-const FAKE = ['Ngọc Anh', 'Minh Tuấn', 'Thu Hà', 'Hoàng Nam', 'Bảo Ngọc', 'Quốc Huy', 'Lan Chi', 'Đức Anh', 'Mai Phương', 'Gia Bảo', 'Khánh Linh', 'Trung Kiên', 'Phương Thảo', 'Tiến Dũng', 'Hải Yến'];
-let fakeN = 0;
+// tên người chơi thử kiểu nick TikTok thật
+const FAKE_NAMES = [
+  'Ngọc Hân', 'Minh Thư', 'Tuấn Anh', 'Bảo Ngọc 🌸', 'Hoàng Long', 'Thảo Vy', 'Gia Huy', 'Khánh Linh', 'Quỳnh Anh', 'Đức Minh',
+  'Phương Thảo', 'Trà My', 'Nhật Nam', 'Yến Nhi', 'Thanh Tâm', 'Mai Anh', 'Hải Đăng', 'Kim Ngân', 'Anh Khoa', 'Thu Trang',
+  'Bé Mèo Ú', 'Cún Con 🐶', 'Hồng Nhung', 'Văn Tài', 'Diễm My', 'Tiểu Bảo', 'Ngân Hà', 'Lan Hương', 'Hữu Phước', 'Như Ý',
+  'minhthu_2k3', 'tuananh.98', 'ngocanh.hp', 'linhh.chii', 'huy.gaming', 'baoanh_08', 'thao.vy99', 'nam.nguyen', 'trang.bui02', 'khoa.dev',
+  'hanhee 🍑', 'dieulinh.06', 'phuc.lee', 'vy.cutee', 'anhthu.ng', 'hoang.dz', 'mylinh_ht', 'quan.tran97', 'chau.sgg', 'long.ka',
+  'Ốc Nhỏ 🐚', 'Mây Lang Thang', 'Gấu Bông', 'Trà Sữa Trân Châu', 'Nắng Hạ', 'Chill Cùng Tui', 'Bé Bơ 🥑', 'Kẹo Ngọt', 'Mèo Lười', 'Sóc Nâu',
+  'Anh Ba Sài Gòn', 'Chị Hai Miền Tây', 'Thằng Cu Tèo', 'Cô Ba Đà Lạt', 'Hai Lúa', 'Út Cưng', 'Tí Nị', 'Bông Bé Bỏng', 'Bin Bin', 'Su Su',
+  'Nguyễn Văn Hùng', 'Trần Thị Hoa', 'Lê Minh Quân', 'Phạm Ngọc Ánh', 'Vũ Đức Thắng', 'Đặng Thu Hà', 'Bùi Anh Tuấn', 'Đỗ Thùy Linh', 'Hồ Văn Hiếu', 'Ngô Thanh Bình',
+  'Linh Kute 💕', 'Huy Đẹp Trai', 'Vy Vy 🎀', 'Tùng Lâm', 'My Mèo', 'Đạt Nè', 'Hiền Thục', 'Phong Bụi', 'Hải Bóng Đá', 'Trinh Bé',
+  'Rose 🌹', 'Jenny', 'Kevin Trần', 'Tony Phạm', 'Lily Nguyễn', 'Sunny', 'Mochi 🍡', 'Bella', 'Daniel', 'Coco'
+];
+let nameBag = [], fakeN = 0;
+function fakeName() {
+  if (!nameBag.length) nameBag = FAKE_NAMES.slice().sort(() => Math.random() - .5);
+  return nameBag.pop();
+}
+// kho avatar của người dùng (chọn trong bảng điều khiển, lưu ở localStorage dùng chung 2 cửa sổ)
+let avatarBag = [];
+function storedAvatars() { try { return JSON.parse(localStorage.getItem('kbl.avatars') || '[]'); } catch { return []; } }
+function fakeAvatarFromStore() {
+  if (!avatarBag.length) avatarBag = storedAvatars().sort(() => Math.random() - .5);
+  return avatarBag.pop() || null;
+}
+addEventListener('storage', e => { if (e.key === 'kbl.avatars') avatarBag = []; });
 function fakeAvatar(n) {
   const hue = (Math.random() * 360) | 0, ch = n.trim()[0] || '?';
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" fill="hsl(${hue},70%,62%)"/><circle cx="64" cy="52" r="26" fill="hsl(${hue},60%,85%)"/><rect x="24" y="84" width="80" height="60" rx="30" fill="hsl(${hue},60%,85%)"/><text x="64" y="62" font-size="30" font-family="Arial" font-weight="bold" text-anchor="middle" fill="hsl(${hue},60%,35%)">${ch}</text></svg>`;
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
-function fakeUser() { fakeN++; const n = FAKE[(Math.random() * FAKE.length) | 0] + ' ' + fakeN; return { id: 'test_' + fakeN + '_' + Date.now(), name: n, avatar: fakeAvatar(n) }; }
+function fakeUser() {
+  fakeN++;
+  const used = new Set(all().map(p => p.name));
+  let n = fakeName(), tries = 0;
+  while (used.has(n) && tries++ < 20) n = fakeName();
+  if (used.has(n)) n = n + ' ' + fakeN;
+  return { id: 'test_' + fakeN + '_' + Date.now(), name: n, avatar: fakeAvatarFromStore() || fakeAvatar(n) };
+}
 const pick = arr => arr[(Math.random() * arr.length) | 0];
 const asUser = p => ({ id: p.id, name: p.name, avatar: p.avatar });
 function fakeLikes(n) {

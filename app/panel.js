@@ -128,6 +128,47 @@ API.onStageState(st => {
   const sig = JSON.stringify([st.L.map(p => p.id + p.state + p.steps + p.coins), st.R.map(p => p.id + p.state + p.steps + p.coins), (st.Y || []).map(p => p.id)]);
   if (sig !== lastQ && !$('#t-queue').matches(':hover')) { lastQ = sig; qList($('#qL'), st.L, 'L'); qList($('#qR'), st.R, 'R'); if (st.Y) { qList($('#qY'), st.Y, 'Y'); $('#qYn').textContent = st.counts ? st.counts.yard : st.Y.length; } }
 });
+// ---- kho avatar (thu nhỏ còn 96px, lưu localStorage dùng chung với màn live)
+const AV_KEY = 'kbl.avatars', AV_MAX = 400;
+function avList() { try { return JSON.parse(localStorage.getItem(AV_KEY) || '[]'); } catch { return []; } }
+function avRender() {
+  const l = avList();
+  $('#avInfo').textContent = l.length ? `Đang có ${l.length} avatar — mỗi người chơi thử lấy ngẫu nhiên 1 ảnh (không trùng cho tới khi dùng hết).` : 'Chưa có avatar — người chơi thử sẽ dùng avatar vẽ sẵn.';
+  $('#avThumbs').innerHTML = l.slice(0, 60).map(u => `<img src="${u}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;border:1px solid #5a3344">`).join('') + (l.length > 60 ? `<span class="hint">+${l.length - 60}</span>` : '');
+}
+function shrink(file) {
+  return new Promise(res => {
+    const url = URL.createObjectURL(file), im = new Image();
+    im.onload = () => {
+      const S = 96, c = document.createElement('canvas'); c.width = c.height = S;
+      const k = Math.max(S / im.width, S / im.height), x = c.getContext('2d');
+      x.imageSmoothingQuality = 'high';
+      x.drawImage(im, (S - im.width * k) / 2, (S - im.height * k) / 2, im.width * k, im.height * k);
+      URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg', .85));
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); res(null); };
+    im.src = url;
+  });
+}
+async function avAdd(files) {
+  const imgs = [...files].filter(f => /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name));
+  if (!imgs.length) { log('Không tìm thấy ảnh trong lựa chọn'); return; }
+  const cur = avList(), room = AV_MAX - cur.length;
+  if (room <= 0) { log(`Kho đã đầy (${AV_MAX} ảnh) — xoá bớt trước`); return; }
+  $('#avInfo').textContent = `Đang xử lý ${Math.min(imgs.length, room)} ảnh…`;
+  const out = [];
+  for (const f of imgs.slice(0, room)) { const d = await shrink(f); if (d) out.push(d); }
+  try { localStorage.setItem(AV_KEY, JSON.stringify(cur.concat(out))); log(`Đã thêm ${out.length} avatar vào kho`); }
+  catch (e) { log('Không lưu được kho avatar (quá lớn): ' + e.message); }
+  avRender();
+}
+$('#btnAvDir').onclick = () => $('#avDir').click();
+$('#btnAvFiles').onclick = () => $('#avFiles').click();
+$('#avDir').onchange = e => { avAdd(e.target.files); e.target.value = ''; };
+$('#avFiles').onchange = e => { avAdd(e.target.files); e.target.value = ''; };
+$('#btnAvClear').onclick = () => { if (confirm('Xoá toàn bộ kho avatar?')) { localStorage.removeItem(AV_KEY); avRender(); } };
+avRender();
+
 API.onLog(log);
 API.onSettings(s => { S = s; fill(); });
 

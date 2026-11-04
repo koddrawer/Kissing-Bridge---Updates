@@ -99,6 +99,17 @@
     <div class="row"><span class="hint" style="min-width:110px">Lên cầu</span><button class="b" data-cmd='{"type":"fakeChat","n":1}'>💬 Comment</button><button class="b" data-cmd='{"type":"fakeChat","n":5}'>💬 x5</button><button class="b" data-cmd='{"type":"fakeFollow"}'>➕ Follow</button><button class="b" data-cmd='{"type":"fakeShare"}'>↗ Share</button></div>
     <div class="row"><span class="hint" style="min-width:110px">Thả tim</span><button class="b" data-cmd='{"type":"fakeLike","n":10}'>❤ x10</button><button class="b" data-cmd='{"type":"fakeLike","n":50}'>❤ x50</button><button class="b" id="btnAutoLike" data-cmd='{"type":"autoLike"}'>❤ Tự thả tim: TẮT</button></div>
   </div>
+  <div class="card"><h3>Kho avatar cho người chơi thử</h3>
+    <div class="row">
+      <button class="b" id="btnAvDir">📁 Chọn thư mục avatar</button>
+      <button class="b" id="btnAvFiles">🖼 Chọn ảnh</button>
+      <button class="b" id="btnAvClear">Xoá kho</button>
+      <input type="file" id="avDir" webkitdirectory multiple style="display:none">
+      <input type="file" id="avFiles" accept="image/*" multiple style="display:none">
+    </div>
+    <div class="hint" id="avInfo">Chưa có avatar — người chơi thử sẽ dùng avatar vẽ sẵn.</div>
+    <div id="avThumbs" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;max-height:110px;overflow:auto"></div>
+  </div>
   <div class="card"><h3>Quà giả (người mới)</h3>
     <div class="row" id="giftBtns"></div>
     <h3 style="margin-top:10px">Quà giả (người đang trên cầu)</h3>
