@@ -1,6 +1,6 @@
 {
- "version": "1.4.1",
- "date": "2026-11-04T04:28:56.540Z",
+ "version": "1.4.2",
+ "date": "2026-11-04T04:34:22.425Z",
  "files": [
   {
    "path": "assets/bg/bridge.png",
@@ -129,8 +129,8 @@
   },
   {
    "path": "stage.js",
-   "sha1": "1a42bce72d29189eff6b9a96ded69c5205be9910",
-   "size": 72213
+   "sha1": "39cb8662bbb022fd258815769dafe644cbd726cb",
+   "size": 73944
   }
  ]
 }

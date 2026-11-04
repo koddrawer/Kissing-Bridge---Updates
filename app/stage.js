@@ -374,13 +374,14 @@ function handleEvent(ev) {
 const voiceQ = []; let speaking = false; const audio = new Audio();
 function say(text, kind) {
   if (!cfg.voice.enabled || !text) return;
+  const lang = isEN() ? 'en' : 'vi';
   if (kind === 'welcome') {
     const pend = voiceQ.filter(v => v.kind === 'welcome').length;
     if (pend >= cfg.voice.welcomeMaxPending) return;
-    voiceQ.push({ text, kind });
+    voiceQ.push({ text, kind, lang });
   } else {
     const idx = voiceQ.findIndex(v => v.kind === 'welcome');
-    if (idx < 0) voiceQ.push({ text, kind }); else voiceQ.splice(idx, 0, { text, kind });
+    if (idx < 0) voiceQ.push({ text, kind, lang }); else voiceQ.splice(idx, 0, { text, kind, lang });
   }
   pumpVoice();
 }
@@ -389,23 +390,47 @@ async function pumpVoice() {
   speaking = true;
   const v = voiceQ.shift();
   try {
+    if (v.lang && v.lang !== (isEN() ? 'en' : 'vi')) throw new Error('skip');      // queued before the language switch
     const r = await API.tts(v.text, voiceCfg());
-    if (r && r.b64) {
+    if (isEN() && r && r.engine && r.engine !== 'edge') {
+      // exe's Google fallback is hard-wired to Vietnamese → speak English via Google en / system en voice instead
+      duckMusic(true);
+      if (!(await playGoogleEN(v.text))) await speakSystem(v.text);
+    } else if (r && r.b64) {
       audio.src = 'data:' + r.mime + ';base64,' + r.b64;
       audio.volume = clamp(cfg.voice.volume, 0, 1);
       duckMusic(true);
       await audio.play();
       await new Promise(res => { audio.onended = res; audio.onerror = res; setTimeout(res, 20000); });
-    } else if (r && r.system && 'speechSynthesis' in window) {
-      const u = new SpeechSynthesisUtterance(r.text); u.lang = isEN() ? 'en-US' : 'vi-VN'; u.volume = cfg.voice.volume; u.rate = 1 + (cfg.voice.rate || 0) / 100;
-      const vv = speechSynthesis.getVoices().find(x => (isEN() ? /^en/i : /vi/i).test(x.lang)); if (vv) u.voice = vv;
+    } else if (r && r.system) {
       duckMusic(true);
-      await new Promise(res => { u.onend = res; u.onerror = res; speechSynthesis.speak(u); setTimeout(res, 20000); });
+      if (!(isEN() && await playGoogleEN(r.text))) await speakSystem(r.text);
     }
-  } catch (e) { log('Voice lỗi: ' + e.message); }
+  } catch (e) { if (e.message !== 'skip') log('Voice lỗi: ' + e.message); }
   duckMusic(false);
   speaking = false;
   setTimeout(pumpVoice, 150);
+}
+function speakSystem(text) {
+  if (!('speechSynthesis' in window)) return Promise.resolve(false);
+  const u = new SpeechSynthesisUtterance(text); u.lang = isEN() ? 'en-US' : 'vi-VN'; u.volume = cfg.voice.volume; u.rate = 1 + (cfg.voice.rate || 0) / 100;
+  const vv = speechSynthesis.getVoices().find(x => (isEN() ? /^en/i : /vi/i).test(x.lang)); if (vv) u.voice = vv;
+  return new Promise(res => { u.onend = () => res(true); u.onerror = () => res(false); speechSynthesis.speak(u); setTimeout(() => res(true), 20000); });
+}
+async function playGoogleEN(text) {
+  const parts = []; let cur = '';
+  for (const w of String(text).replace(/[^\p{L}\p{N}\s.,!?'-]/gu, ' ').split(/\s+/)) { if (!w) continue; if ((cur + ' ' + w).length > 180) { parts.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w; }
+  if (cur) parts.push(cur);
+  for (const p of parts) {
+    const ok = await new Promise(res => {
+      audio.src = 'https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=' + encodeURIComponent(p);
+      audio.volume = clamp(cfg.voice.volume, 0, 1);
+      audio.onended = () => res(true); audio.onerror = () => res(false);
+      audio.play().catch(() => res(false)); setTimeout(() => res(true), 20000);
+    });
+    if (!ok) return false;
+  }
+  return parts.length > 0;
 }
 const music = document.getElementById('music');
 function duckMusic(on) { music.volume = clamp((cfg.music.volume || 0) * (on ? 0.4 : 1), 0, 1); }
@@ -1150,7 +1175,7 @@ function handleCmd(c) {
       for (let i = 0; i < (c.n || 1); i++) {
         const y = all().filter(p => p.state === 'yard');
         const u = y.length ? asUser(pick(y)) : fakeUser();
-        handleEvent({ type: 'chat', user: u, text: c.text || pick(['Cho mình lên cầu với 😍', 'Đẹp quá', 'Lên cầu nào!', 'Ai ghép với mình đi', 'Phú Quốc đỉnh quá']) });
+        handleEvent({ type: 'chat', user: u, text: c.text || pick(isEN() ? ['Let me on the bridge 😍', 'So pretty!', 'Hop on!', 'Who wants to match with me?', 'Kissing Island 💕'] : ['Cho mình lên cầu với 😍', 'Đẹp quá', 'Lên cầu nào!', 'Ai ghép với mình đi', 'Phú Quốc đỉnh quá']) });
       }
       break;
     }
@@ -1164,7 +1189,7 @@ function handleCmd(c) {
     case 'fakeGift': {
       const b = all().filter(p => p.state === 'bridge' || p.state === 'center');
       const u = c.toExisting && b.length ? asUser(pick(b)) : fakeUser();
-      handleEvent({ type: 'gift', user: u, coins: c.coins || 1, gift: c.coins >= 100 ? 'Nhẫn cưới' : c.coins >= 10 ? 'Bó hoa' : c.coins >= 5 ? 'Kẹo bông' : 'Hoa hồng', count: 1 });
+      handleEvent({ type: 'gift', user: u, coins: c.coins || 1, gift: isEN() ? (c.coins >= 100 ? 'Wedding Ring' : c.coins >= 10 ? 'Bouquet' : c.coins >= 5 ? 'Cotton Candy' : 'Rose') : (c.coins >= 100 ? 'Nhẫn cưới' : c.coins >= 10 ? 'Bó hoa' : c.coins >= 5 ? 'Kẹo bông' : 'Hoa hồng'), count: 1 });
       break;
     }
     case 'remove': removeId(c.id); break;
@@ -1269,7 +1294,7 @@ const NEW_RULES = {
   await Promise.all(['800 20px B2', '20px PX'].map(f => document.fonts.load(f, 'Aàáạ')));
   await loadAssets();
   restore(await API.restoreState());
-  API.onSettings(s => { cfg = s; rebuildPaths(); all().forEach(p => p.tier = tierFor(p.coins)); applyMusic(); });
+  API.onSettings(s => { if ((s.lang || 'vi') !== (cfg.lang || 'vi')) { voiceQ.length = 0; tickerX = null; } cfg = s; rebuildPaths(); all().forEach(p => p.tier = tierFor(p.coins)); applyMusic(); });
   API.onLiveEvent(handleEvent);
   API.onCmd(handleCmd);
   applyMusic();
