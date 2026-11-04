@@ -1,6 +1,6 @@
 {
- "version": "1.3.3",
- "date": "2026-11-04T02:43:49.923Z",
+ "version": "1.3.4",
+ "date": "2026-11-04T02:52:38.579Z",
  "files": [
   {
    "path": "assets/bg/bridge.png",
@@ -114,8 +114,8 @@
   },
   {
    "path": "panel.html",
-   "sha1": "1a72158a9be492132aa61f311b913e5d1fbcaed2",
-   "size": 21908
+   "sha1": "ad0382d53cf83e0626327ad9800f40856a4b436e",
+   "size": 22076
   },
   {
    "path": "panel.js",
