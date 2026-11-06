@@ -92,7 +92,32 @@ $('#btnSay').onclick = () => API.cmd({ type: 'say', text: $('#sayText').value })
 $('#btnConnect').onclick = () => API.connect($('#user').value.trim());
 $('#btnDisconnect').onclick = () => API.disconnect();
 $('#user').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btnConnect').click(); });
-API.onLiveStatus(st => { const el = $('#status'); el.textContent = st.text; el.className = 'status ' + st.state; log(st.text); });
+// Khi máy chủ ký EulerStream báo hết lượt/ngày: dừng vòng thử lại 60s (mỗi lần thử lại tốn thêm lượt), chờ lâu rồi mới thử
+let rlTimer = null, rlUntil = 0, rlHold = false;
+function rlTick() {
+  if (!rlUntil) return;
+  const left = Math.max(0, Math.round((rlUntil - Date.now()) / 1000));
+  const el = $('#status');
+  el.className = 'status error';
+  el.textContent = `Hết lượt kết nối miễn phí của máy chủ ký EulerStream. Tự thử lại sau ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} (hoặc bấm Kết nối để thử ngay).`;
+  if (left > 0) rlTimer = setTimeout(rlTick, 1000);
+  else { rlUntil = 0; rlHold = false; log('Thử kết nối lại sau thời gian chờ giới hạn lượt'); API.connect((S.tiktokUser || $('#user').value || '').trim()); }
+}
+API.onLiveStatus(st => {
+  const txt = String(st.text || '');
+  if (/rate_limit_account|rate.?limit|Too many connections|429/i.test(txt) && !rlHold) {
+    rlHold = true;
+    log(txt);
+    const mins = Math.max(5, (S.rateLimitWaitMin || 30));
+    log(`⛔ Máy chủ ký EulerStream đã giới hạn lượt — dừng tự thử lại, chờ ${mins} phút. Gợi ý: đăng ký API key miễn phí ở eulerstream.com và dán vào ô "API key EulerStream".`);
+    API.disconnect();
+    clearTimeout(rlTimer); rlUntil = Date.now() + mins * 60000; rlTick();
+    return;
+  }
+  if (rlHold && (st.state === 'idle' || st.state === 'retry')) return;        // giữ thông báo đếm ngược
+  const el = $('#status'); el.textContent = txt; el.className = 'status ' + st.state; log(txt);
+});
+$('#btnConnect').addEventListener('click', () => { clearTimeout(rlTimer); rlUntil = 0; rlHold = false; });
 
 // window
 $$('[data-size]').forEach(b => b.onclick = () => { const [w, h] = b.dataset.size.split('x').map(Number); API.setSettings({ window: { width: w, height: h } }).then(s => S = s); });

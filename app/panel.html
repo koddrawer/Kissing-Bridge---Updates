@@ -60,6 +60,7 @@
     <div class="row"><input type="text" id="user" placeholder="username TikTok (không cần @)"><button class="b p" id="btnConnect">Kết nối</button><button class="b" id="btnDisconnect">Ngắt</button></div>
     <div class="row"><input type="checkbox" data-k="autoConnect" id="ac"><label for="ac" style="min-width:0">Tự kết nối khi mở app</label></div>
     <div class="row"><label>API key EulerStream (không bắt buộc)</label><input type="text" data-k="signApiKey" placeholder="để trống nếu không có"></div>
+    <div class="row"><label>Khi hết lượt: chờ (phút) rồi thử lại</label><input type="number" min="5" data-k="rateLimitWaitMin" placeholder="30"></div>
     <div class="status" id="status">Chưa kết nối</div>
   </div>
   <div class="card"><h3>Tình hình</h3>
