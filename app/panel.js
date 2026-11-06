@@ -118,6 +118,12 @@ API.onLiveStatus(st => {
   const el = $('#status'); el.textContent = txt; el.className = 'status ' + st.state; log(txt);
 });
 $('#btnConnect').addEventListener('click', () => { clearTimeout(rlTimer); rlUntil = 0; rlHold = false; });
+// exe < 1.0.4: thư viện giữ key cũ cho tới khi khởi động lại app
+document.querySelector('[data-k="signApiKey"]').addEventListener('change', async () => {
+  const info = await API.appInfo(); const v = String(info.version || '0').split('.').map(Number);
+  if (v[0] < 1 || (v[0] === 1 && v[1] === 0 && (v[2] || 0) < 4)) log('ℹ️ Đã lưu API key. Bản exe ' + info.version + ' cần TẮT HẲN app rồi mở lại thì key mới có tác dụng (exe 1.0.4 trở lên không cần).');
+  else log('Đã lưu API key — bấm Kết nối để dùng.');
+});
 
 // window
 $$('[data-size]').forEach(b => b.onclick = () => { const [w, h] = b.dataset.size.split('x').map(Number); API.setSettings({ window: { width: w, height: h } }).then(s => S = s); });
