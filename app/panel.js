@@ -23,9 +23,6 @@ function fill() {
   });
   $$('[data-show]').forEach(el => el.textContent = get(S, el.dataset.show));
   if (document.activeElement !== $('#user')) $('#user').value = S.tiktokUser || '';
-  if (document.activeElement !== $('#guide')) $('#guide').value = (S.boards.guideLines || []).join('\n');
-  if (document.activeElement !== $('#pathL')) $('#pathL').value = JSON.stringify(S.bridge.leftPath);
-  if (document.activeElement !== $('#pathR')) $('#pathR').value = JSON.stringify(S.bridge.rightPath);
   $$('[data-arr]').forEach(el => { if (document.activeElement !== el) el.value = (get(S, el.dataset.arr) || []).join('\n'); });
   $('#musicName').textContent = S.music.file ? S.music.file.split(/[\\/]/).pop() : '(không có)';
   renderTiers();
@@ -43,10 +40,8 @@ $$('[data-k]').forEach(el => {
 
 function renderTiers() {
   const t = $('#tiers'); if (t.contains(document.activeElement)) return;
-  t.innerHTML = '<tr><td class="hint">Mức</td><td class="hint">Từ (xu)</td><td class="hint">Tốc độ x</td><td class="hint">Hôn liền</td><td class="hint">Tên</td><td class="hint">Khung</td></tr>' +
+  t.innerHTML = '<tr><td class="hint">Mức</td><td class="hint">Từ (xu)</td><td class="hint">Tên khung</td><td class="hint">Ảnh khung</td></tr>' +
     S.tiers.map((x, i) => `<tr><td>${i + 1}</td><td><input type="number" min="1" data-ti="${i}" data-f="coins" value="${x.coins}" style="width:60px"></td>
-      <td><input type="number" min="1" step="0.5" data-ti="${i}" data-f="speed" value="${x.speed || 1}" style="width:55px"></td>
-      <td><input type="number" min="0" data-ti="${i}" data-f="chain" value="${x.chain || 0}" style="width:50px" title="0 = không"></td>
       <td><input type="text" data-ti="${i}" data-f="label" value="${esc(x.label)}"></td>
       <td><select data-ti="${i}" data-f="frame">${frames.map(f => `<option ${f === x.frame ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></td></tr>`).join('');
   t.querySelectorAll('[data-ti]').forEach(el => el.onchange = () => {
@@ -56,7 +51,7 @@ function renderTiers() {
     API.setSettings({ tiers }).then(s => S = s);
   });
 }
-const SOUNDS = [['join', '🔔 Tiếng vào (sân chờ)'], ['fly', '🕊 Bay lên cầu'], ['kiss', '💋 Tiếng hôn'], ['gift', '🎁 Tiếng nhận quà'], ['fanfare', '🖼 Tiếng khung'], ['poof', '💨 Rời cầu']];
+const SOUNDS = [['join', '🔔 Tiếng vào hàng chờ'], ['fly', '✨ Nhân vật xuất hiện'], ['kiss', '💋 Tiếng hôn'], ['gift', '🎁 Tiếng nhận quà'], ['fanfare', '🖼 Tiếng khung']];
 function renderSounds() {
   const t = $('#sounds'); if (!t || t.contains(document.activeElement)) return;
   const F = (S.sfx && S.sfx.files) || {}, V = (S.sfx && S.sfx.vols) || {};
@@ -74,11 +69,6 @@ function renderGiftBtns() {
 }
 
 $$('[data-arr]').forEach(el => el.addEventListener('change', () => set(el.dataset.arr, el.value.split('\n').map(x => x.trim()).filter(Boolean))));
-$('#guide').onchange = () => API.setSettings({ boards: { guideLines: $('#guide').value.split('\n').map(s => s.trim()).filter(Boolean) } }).then(s => S = s);
-$('#btnPath').onclick = () => {
-  try { const L = JSON.parse($('#pathL').value), R = JSON.parse($('#pathR').value); API.setSettings({ bridge: { leftPath: L, rightPath: R } }).then(s => { S = s; log('Đã lưu đường đi'); }); }
-  catch (e) { alert('Sai định dạng JSON: ' + e.message); }
-};
 $$('[data-reset]').forEach(b => b.onclick = () => API.resetSettings(b.dataset.reset).then(s => { S = s; fill(); }));
 
 // commands (delegated so dynamic buttons work)
@@ -143,23 +133,19 @@ $('#btnUD').onclick = () => API.openUserData();
 $('#btnAD').onclick = () => API.openAppDir();
 
 // queue view
-function qList(el, arr, side) {
-  const ic = { yard: '🏖', bridge: '🌉', center: '💗' };
-  el.innerHTML = arr.slice(0, 80).map((p, i) => `<div class="${p.coins ? 'don' : ''}"><b>${ic[p.state] || ''}</b><span title="${esc(p.id)}">${esc(p.name)}${p.state === 'bridge' ? ' · ' + p.steps + ' bước' : ''}${p.coins ? ' · ' + p.coins + 'xu' : ''}${p.chain ? ' · 💋x' + p.chain : ''}</span>
+function qList(el, arr) {
+  el.innerHTML = arr.slice(0, 120).map((p, i) => `<div class="${p.coins ? 'don' : ''}"><b>${i + 1}</b><span title="${esc(p.id)}">${p.prio ? '📌' : ''}${esc(p.name)}${p.coins ? ' · 💎' + p.coins + ' xu' : ''}</span>
     <button class="b s" data-cmd='${esc(JSON.stringify({ type: 'promote', id: p.id }))}'>⬆</button>
-    <button class="b s" data-cmd='${esc(JSON.stringify({ type: 'move', id: p.id }))}'>⇄</button>
-    <button class="b s" data-cmd='${esc(JSON.stringify({ type: 'remove', id: p.id }))}'>✕</button></div>`).join('') + (arr.length > 80 ? `<div class="hint">… và ${arr.length - 80} người nữa</div>` : '');
+    <button class="b s" data-cmd='${esc(JSON.stringify({ type: 'remove', id: p.id }))}'>✕</button></div>`).join('') + (arr.length > 120 ? `<div class="hint">… và ${arr.length - 120} người nữa</div>` : '') || '<div class="hint">Hàng chờ trống</div>';
 }
 let lastQ = '';
 API.onStageState(st => {
-  $('#cL').textContent = st.L.length; $('#cR').textContent = st.R.length;
-  if (st.counts) { $('#cYard').textContent = st.counts.yard; $('#cBridge').textContent = st.counts.bridge; $('#cCenter').textContent = st.counts.center; }
-  $('#btnAutoLike').textContent = '❤ Tự thả tim: ' + (st.autoLike ? 'BẬT' : 'TẮT');
-  $('#qLn').textContent = st.L.length; $('#qRn').textContent = st.R.length;
+  $('#cQueue').textContent = st.queueLen; $('#qYn').textContent = st.queueLen;
   $('#cDone').textContent = st.done; $('#cVoice').textContent = st.voiceQ;
-  $('#pairNow').textContent = st.pair ? `💋 ${st.pair[0].name}  ❤  ${st.pair[1].name}${st.chain ? '  (hôn liền ' + st.chain[0] + '/' + st.chain[1] + ')' : ''}  (${st.phase})` : 'Đang chờ cặp tiếp theo…';
-  const sig = JSON.stringify([st.L.map(p => p.id + p.state + p.steps + p.coins), st.R.map(p => p.id + p.state + p.steps + p.coins), (st.Y || []).map(p => p.id)]);
-  if (sig !== lastQ && !$('#t-queue').matches(':hover')) { lastQ = sig; qList($('#qL'), st.L, 'L'); qList($('#qR'), st.R, 'R'); if (st.Y) { qList($('#qY'), st.Y, 'Y'); $('#qYn').textContent = st.counts ? st.counts.yard : st.Y.length; } }
+  const ph = { enter: 'đang vào', kiss: 'đang hôn', showcase: 'đứng trong khung', exit: 'rời cảnh' }[st.phase] || st.phase;
+  $('#pairNow').textContent = st.pair ? (st.pair[1] ? `💋 ${st.pair[0].name}  ❤  ${st.pair[1].name}  (${ph})` : `💗 ${st.pair[0].name} đang chờ nửa kia…`) : 'Chưa có ai trên cầu';
+  const sig = JSON.stringify(st.Q.map(p => p.id + p.coins + p.prio));
+  if (sig !== lastQ && !$('#t-queue').matches(':hover')) { lastQ = sig; qList($('#qY'), st.Q); }
 });
 // ---- kho avatar (thu nhỏ còn 96px, lưu localStorage dùng chung với màn live)
 const AV_KEY = 'kbl.avatars', AV_MAX = 400;

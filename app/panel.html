@@ -64,18 +64,14 @@
     <div class="status" id="status">Chưa kết nối</div>
   </div>
   <div class="card"><h3>Tình hình</h3>
-    <div class="cols"><div>Bên trái: <span class="big" id="cL">0</span></div><div>Bên phải: <span class="big" id="cR">0</span></div></div>
     <div class="pair" id="pairNow">—</div>
-    <div class="hint">Sân chờ: <b id="cYard">0</b> · Trên cầu: <b id="cBridge">0</b> · Chờ giữa cầu: <b id="cCenter">0</b><br>Số nụ hôn: <b id="cDone">0</b> · Giọng đang chờ đọc: <b id="cVoice">0</b></div>
+    <div class="hint">Hàng chờ: <b id="cQueue">0</b> người · Số nụ hôn: <b id="cDone">0</b> · Giọng đang chờ đọc: <b id="cVoice">0</b></div>
   </div>
-  <div class="card"><h3>Luật chơi</h3>
-    <div class="row"><input type="checkbox" data-k="join.onMember"> Vào xem live → hiện ở sân chờ</div>
-    <div class="hint" style="margin:6px 0 2px">Lên cầu bằng:</div>
-    <div class="row"><input type="checkbox" data-k="join.onComment"> Bình luận &nbsp; <input type="checkbox" data-k="join.onFollow"> Follow (1 lần/người) &nbsp; <input type="checkbox" data-k="join.onShare"> Chia sẻ</div>
-    <div class="row"><label>Số bước tới giữa cầu</label><input type="number" min="5" data-k="game.steps"> <span class="hint">1 tim = 1 bước</span></div>
-    <div class="row"><label>Không thả tim → rời cầu sau (s)</label><input type="number" min="3" data-k="game.idleSec"></div>
-    <div class="row"><label>Tối đa người ở mỗi sân chờ</label><input type="number" min="10" data-k="game.maxYard"></div>
-    <div class="hint">Ai đến giữa cầu sẽ đứng chờ nửa kia, không bị biến mất. Hôn xong cả 2 về sân chờ.</div>
+  <div class="card"><h3>Ai được vào hàng chờ</h3>
+    <div class="row"><input type="checkbox" data-k="join.onMember"> Vào xem live &nbsp; <input type="checkbox" data-k="join.onComment"> Bình luận &nbsp; <input type="checkbox" data-k="join.onFollow"> Follow (1 lần) &nbsp; <input type="checkbox" data-k="join.onShare"> Chia sẻ &nbsp; <input type="checkbox" data-k="join.onLike"> Thả tim</div>
+    <div class="row"><label>Hôn xong được xếp lại sau (phút)</label><input type="number" min="0" data-k="join.rejoinMinutes"></div>
+    <div class="row"><label>Hàng chờ tối đa</label><input type="number" min="2" data-k="join.maxQueue"></div>
+    <div class="hint">Người đầu hàng đứng bên trái, người kế tiếp xuất hiện bên phải rồi hai người hôn nhau. Ai tặng quà được lên đầu hàng (xu nhiều đứng trước) và nhận khung theo mức donate.</div>
   </div>
   <div class="card"><h3>Nhật ký</h3><div id="log"></div></div>
 </section>
@@ -83,23 +79,17 @@
 <!-- QUEUE -->
 <section id="t-queue">
   <div class="card"><h3>Điều khiển</h3>
-    <div class="row"><button class="b p" data-cmd="forcePair">💋 Ghép cặp ngay</button><button class="b" data-cmd="skip">⏭ Bỏ qua cảnh hôn</button></div>
-    <div class="row"><button class="b" data-cmd="clear">↩ Đưa hết về sân chờ</button><button class="b" data-cmd="clearAll">🗑 Xoá tất cả</button><button class="b" data-cmd="clearDone">↺ Cho follow lại được tính</button></div>
-    <div class="hint">⬆ đưa lên cầu / ra giữa cầu · ⇄ đổi sang cầu bên kia · ✕ xoá. Người lên cầu được chia luân phiên trái/phải.</div>
+    <div class="row"><button class="b p" data-cmd="skip">⏭ Bỏ qua cặp đang hôn</button><button class="b" data-cmd="clear">🗑 Xoá hàng chờ</button><button class="b" data-cmd="clearDone">↺ Cho người đã hôn xếp lại ngay</button></div>
+    <div class="hint">⬆ đưa lên đầu hàng · ✕ xoá khỏi hàng</div>
   </div>
-  <div class="cols">
-    <div class="card"><h3>Bên trái (<span id="qLn">0</span>)</h3><div class="q" id="qL"></div></div>
-    <div class="card"><h3>Bên phải (<span id="qRn">0</span>)</h3><div class="q" id="qR"></div></div>
-  </div>
-  <div class="card"><h3>Sân chờ (<span id="qYn">0</span>)</h3><div class="q" id="qY"></div></div>
+  <div class="card"><h3>Hàng chờ (<span id="qYn">0</span>)</h3><div class="q" id="qY" style="max-height:520px"></div></div>
 </section>
 
 <!-- TEST -->
 <section id="t-test">
   <div class="card"><h3>Người xem giả</h3>
-    <div class="row"><span class="hint" style="min-width:110px">Vào sân chờ</span><button class="b" data-cmd='{"type":"fake","n":1}'>+1</button><button class="b" data-cmd='{"type":"fake","n":5}'>+5</button><button class="b" data-cmd='{"type":"fake","n":20}'>+20</button></div>
-    <div class="row"><span class="hint" style="min-width:110px">Lên cầu</span><button class="b" data-cmd='{"type":"fakeChat","n":1}'>💬 Comment</button><button class="b" data-cmd='{"type":"fakeChat","n":5}'>💬 x5</button><button class="b" data-cmd='{"type":"fakeFollow"}'>➕ Follow</button><button class="b" data-cmd='{"type":"fakeShare"}'>↗ Share</button></div>
-    <div class="row"><span class="hint" style="min-width:110px">Thả tim</span><button class="b" data-cmd='{"type":"fakeLike","n":10}'>❤ x10</button><button class="b" data-cmd='{"type":"fakeLike","n":50}'>❤ x50</button><button class="b" id="btnAutoLike" data-cmd='{"type":"autoLike"}'>❤ Tự thả tim: TẮT</button></div>
+    <div class="row"><span class="hint" style="min-width:110px">Vào live</span><button class="b" data-cmd='{"type":"fake","n":1}'>+1</button><button class="b" data-cmd='{"type":"fake","n":2}'>+2</button><button class="b" data-cmd='{"type":"fake","n":5}'>+5</button><button class="b" data-cmd='{"type":"fake","n":20}'>+20</button></div>
+    <div class="row"><span class="hint" style="min-width:110px">Khác</span><button class="b" data-cmd='{"type":"fakeChat","n":1}'>💬 Comment</button><button class="b" data-cmd='{"type":"fakeFollow"}'>➕ Follow</button><button class="b" data-cmd='{"type":"fakeShare"}'>↗ Share</button></div>
   </div>
   <div class="card"><h3>Kho avatar cho người chơi thử</h3>
     <div class="row">
@@ -114,7 +104,7 @@
   </div>
   <div class="card"><h3>Quà giả (người mới)</h3>
     <div class="row" id="giftBtns"></div>
-    <h3 style="margin-top:10px">Quà giả (người đang trên cầu)</h3>
+    <h3 style="margin-top:10px">Quà giả (người cuối hàng chờ)</h3>
     <div class="row" id="giftBtns2"></div>
   </div>
   <div class="card"><h3>Âm thanh</h3>
@@ -125,14 +115,9 @@
 
 <!-- DONATE -->
 <section id="t-donate">
-  <div class="card"><h3>Mức donate → tốc độ & khung</h3>
+  <div class="card"><h3>Mức donate → khung</h3>
     <table id="tiers"></table>
-    <div class="hint">Xu tích luỹ của từng người. Cặp đôi dùng mức cao nhất trong 2 người. Sau khi hôn, 2 người đứng cạnh nhau và khung bay tới phía sau.</div>
-  </div>
-  <div class="card"><h3>Bảng hướng dẫn (giữa)</h3>
-    <textarea id="guide" style="min-height:120px"></textarea>
-    <div class="hint">Mỗi dòng 1 mục. Biến: <code>{steps}</code> số bước, <code>{idle}</code> giây rời cầu, <code>{t1}</code>…<code>{t4}</code> số xu, <code>{s1}</code>…<code>{s4}</code> tốc độ, <code>{c4}</code> số người hôn liền.</div>
-    <div class="row"><label>Tiêu đề thay thế</label><input type="text" data-k="boards.guideTitle" placeholder="để trống = giữ chữ trong ảnh"></div>
+    <div class="hint">Xu tích luỹ của từng người. Tặng quà = lên đầu hàng chờ (xu nhiều đứng trước). Cặp đôi dùng mức cao nhất trong 2 người: hôn xong 2 người đứng cạnh nhau và khung bay tới phía sau.</div>
   </div>
 </section>
 
@@ -149,9 +134,8 @@
     <div class="row"><label>Câu chào</label></div><textarea data-k="voice.welcomeTpl"></textarea>
     <div class="row"><label>Chúc mừng khi hôn</label></div><textarea data-k="voice.congratsTpl"></textarea>
     <div class="row"><label>Cảm ơn quà</label></div><textarea data-k="voice.giftTpl"></textarea>
-    <div class="row"><label>Cảm ơn quà hôn liền</label></div><textarea data-k="voice.chainTpl"></textarea>
-    <div class="row"><label>Chúc mừng khung donate</label></div><textarea data-k="voice.donorTpl"></textarea>
-    <div class="hint">Biến: <code>{name}</code> <code>{side}</code> <code>{a}</code> <code>{b}</code> <code>{gift}</code> <code>{speed}</code> <code>{n}</code> <code>{frame}</code></div>
+        <div class="row"><label>Chúc mừng khung donate</label></div><textarea data-k="voice.donorTpl"></textarea>
+    <div class="hint">Biến: <code>{name}</code> <code>{a}</code> <code>{b}</code> <code>{gift}</code> <code>{frame}</code></div>
   </div>
   <div class="card"><h3>Giọng đọc tiếng Anh (khi màn live là English)</h3>
     <div class="row"><label>Giọng</label><select data-k="en.voice.voice"><option value="en-GB-SoniaNeural">Sonia (nữ, Anh) ★</option><option value="en-GB-LibbyNeural">Libby (nữ, Anh)</option><option value="en-GB-MaisieNeural">Maisie (bé gái, Anh)</option><option value="en-GB-RyanNeural">Ryan (nam, Anh)</option><option value="en-GB-ThomasNeural">Thomas (nam, Anh)</option><option value="en-US-JennyNeural">Jenny (nữ, Mỹ)</option><option value="en-US-AriaNeural">Aria (nữ, Mỹ)</option><option value="en-US-GuyNeural">Guy (nam, Mỹ)</option><option value="en-AU-NatashaNeural">Natasha (nữ, Úc)</option></select> <button class="b s" data-cmd='{"type":"say"}'>🔊 Thử</button></div>
@@ -159,8 +143,7 @@
     <div class="row"><label>Câu chào</label></div><textarea data-k="en.voice.welcomeTpl"></textarea>
     <div class="row"><label>Chúc mừng khi hôn</label></div><textarea data-k="en.voice.congratsTpl"></textarea>
     <div class="row"><label>Cảm ơn quà</label></div><textarea data-k="en.voice.giftTpl"></textarea>
-    <div class="row"><label>Cảm ơn quà hôn liền</label></div><textarea data-k="en.voice.chainTpl"></textarea>
-    <div class="row"><label>Chúc mừng khung donate</label></div><textarea data-k="en.voice.donorTpl"></textarea>
+        <div class="row"><label>Chúc mừng khung donate</label></div><textarea data-k="en.voice.donorTpl"></textarea>
   </div>
   <div class="card"><h3>Âm thanh tuỳ chỉnh</h3>
     <table id="sounds"></table>
@@ -179,17 +162,15 @@
     <div class="row"><label>Ngôn ngữ</label><select data-k="lang"><option value="vi">Tiếng Việt</option><option value="en">English</option></select></div>
     <div class="hint">Đổi toàn bộ chữ trên màn live, bảng hướng dẫn, tên khung, dải chữ chạy và giọng đọc. Bảng điều khiển vẫn là tiếng Việt.</div>
   </div>
-  <div class="card"><h3>Dải chữ hướng dẫn chạy (mép trên)</h3>
+  <div class="card"><h3>Dải chữ hướng dẫn chạy</h3>
     <div class="row"><input type="checkbox" data-k="ticker.show"> Hiện dải chữ chạy</div>
     <div class="row"><label>Tốc độ / cỡ chữ / cao</label><input type="number" data-k="ticker.speed"><input type="number" data-k="ticker.fontSize"><input type="number" data-k="ticker.h"></div>
     <div class="row"><label>Vị trí y</label><input type="number" data-k="ticker.y"></div>
     <div class="row"><label>Nội dung tiếng Việt</label></div><textarea data-k="ticker.text" placeholder="để trống = dùng nội dung mặc định theo luật chơi"></textarea>
     <div class="row"><label>Nội dung tiếng Anh</label></div><textarea data-k="en.ticker"></textarea>
-    <div class="hint">Biến: <code>{steps}</code> <code>{idle}</code> <code>{t1}</code>…<code>{t4}</code> <code>{s1}</code>…<code>{s3}</code> <code>{c4}</code></div>
+    <div class="hint">Biến: <code>{t1}</code>…<code>{t4}</code> số xu từng mức, <code>{l1}</code>…<code>{l4}</code> tên khung từng mức</div>
   </div>
   <div class="card"><h3>Nội dung tiếng Anh</h3>
-    <div class="row"><label>Tiêu đề bảng hướng dẫn</label><input type="text" data-k="en.guideTitle"></div>
-    <div class="row"><label>Các dòng hướng dẫn (mỗi dòng 1 mục)</label></div><textarea data-arr="en.guideLines" style="min-height:110px"></textarea>
     <div class="row"><label>Tên khung theo mức (mỗi dòng 1 mức)</label></div><textarea data-arr="en.tierLabels"></textarea>
     <div class="row"><label>Tiêu đề cảnh hôn</label><input type="text" data-k="en.panelTitle" placeholder="để trống = 💋 A Kiss on the Bridge 💋"></div>
   </div>
@@ -198,56 +179,33 @@
     <div class="row"><input type="checkbox" data-k="window.alwaysOnTop"> Luôn ở trên cùng <button class="b" id="btnFull">Toàn màn hình</button><button class="b" id="btnReload">Tải lại màn live</button></div>
   </div>
   <div class="card"><h3>Thời gian</h3>
-    <div class="row"><label>Tốc độ hoạt ảnh đi (px/s)</label><input type="number" data-k="timing.walkSpeed"></div>
-    <div class="row"><label>Khoảng cách người chờ giữa cầu</label><input type="number" data-k="timing.slotSpacing"></div>
-    <div class="row"><label>Mỗi nụ hôn khi hôn liền (s)</label><input type="number" step="0.5" data-k="timing.chainKissSec"></div>
-    <div class="row"><label>Đứng giữa cầu (s)</label><input type="number" step="0.1" data-k="timing.waitAtEndSec"></div>
-    <div class="row"><label>Chuyển cảnh (s)</label><input type="number" step="0.1" data-k="timing.fadeSec"></div>
-    <div class="row"><label>Đi lại gần lan can (s)</label><input type="number" step="0.1" data-k="timing.approachSec"></div>
+    <div class="row"><label>Đi vào chỗ đứng (s)</label><input type="number" step="0.1" data-k="timing.approachSec"></div>
+    <div class="row"><label>Dừng trước khi hôn (s)</label><input type="number" step="0.1" data-k="timing.pauseSec"></div>
     <div class="row"><label>Thời gian hôn (s)</label><input type="number" step="0.5" data-k="timing.kissSec"></div>
     <div class="row"><label>Đứng trong khung (s)</label><input type="number" step="0.5" data-k="timing.showcaseSec"></div>
-  </div>
-  <div class="card"><h3>Cầu</h3>
-    <div class="row"><label>Cao nhân vật (chân cầu)</label><input type="number" data-k="bridge.charH"></div>
-    <div class="row"><label>Tỉ lệ ở giữa cầu</label><input type="number" step="0.05" data-k="bridge.farScale"></div>
-    <div class="row"><label>Cỡ tên</label><input type="number" data-k="bridge.nameSize"></div>
-    <div class="row"><input type="checkbox" data-k="bridge.showPath"> Hiện đường đi (để chỉnh)</div>
-    <div class="row"><label>Đường trái [[x,y],…]</label></div><textarea id="pathL"></textarea>
-    <div class="row"><label>Đường phải</label></div><textarea id="pathR"></textarea>
-    <div class="row"><button class="b" id="btnPath">Lưu đường đi</button><button class="b" data-reset="bridge">Mặc định</button></div>
-    <div class="hint">Toạ độ theo ảnh nền 941×1670. Điểm đầu là chân cầu, điểm cuối là giữa cầu.</div>
+    <div class="row"><label>Rời cảnh (s)</label><input type="number" step="0.1" data-k="timing.exitSec"></div>
   </div>
   <div class="card"><h3>Cảnh hôn</h3>
-    <div class="row"><label>Tiêu đề khung hôn</label><input type="text" data-k="kiss.panelTitle"></div>
-    <div class="row"><label>Camera: chia màn ở y</label><input type="number" data-k="kiss.cam.split"> <span class="hint">836 = nửa màn hình</span></div>
-    <div class="row"><label>Toàn cảnh cầu: từ y / zoom</label><input type="number" data-k="kiss.cam.camTop"><input type="number" step="0.05" data-k="kiss.cam.scale"></div>
-    <div class="row"><label>Cận cảnh hôn: cắt từ y</label><input type="number" data-k="kiss.cam.kissCropY"></div>
-    <div class="row"><label>Cao nhân vật</label><input type="number" data-k="kiss.charH"></div>
-    <div class="row"><label>Chân ở y</label><input type="number" data-k="kiss.feetY"></div>
-    <div class="row"><label>Khe môi</label><input type="number" data-k="kiss.lipGap"></div>
+    <div class="row"><label>Tiêu đề (ruy băng)</label><input type="text" data-k="kiss.panelTitle"></div>
+    <div class="row"><label>Ruy băng: vị trí y</label><input type="number" data-k="ribbon.y"></div>
+    <div class="row"><label>Cao nhân vật / chân ở y</label><input type="number" data-k="kiss.charH"><input type="number" data-k="kiss.feetY"></div>
+    <div class="row"><label>Khe môi / cách khi đứng chờ</label><input type="number" data-k="kiss.lipGap"><input type="number" data-k="kiss.standGap"></div>
+    <div class="row"><label>Điểm xuất hiện trái / phải (x)</label><input type="number" data-k="kiss.leftStartX"><input type="number" data-k="kiss.rightStartX"></div>
     <div class="row"><label>Số tim bay quanh</label><input type="number" data-k="kiss.hearts"></div>
-    <div class="row"><label>Cao (đứng trong khung)</label><input type="number" data-k="kiss.showcaseCharH"></div>
-    <div class="row"><label>Chân (đứng trong khung) y</label><input type="number" data-k="kiss.showcaseFeetY"></div>
-    <div class="row"><label>Khung rộng</label><input type="number" data-k="kiss.frameW"></div>
-    <div class="row"><label>Tâm khung y</label><input type="number" data-k="kiss.frameY"></div>
-    <div class="row"><button class="b" data-reset="kiss">Mặc định</button></div>
+    <div class="row"><label>Đứng trong khung: cao / chân y</label><input type="number" data-k="kiss.showcaseCharH"><input type="number" data-k="kiss.showcaseFeetY"></div>
+    <div class="row"><label>Khung: rộng / tâm y</label><input type="number" data-k="kiss.frameW"><input type="number" data-k="kiss.frameY"></div>
+    <div class="row"><label>Thông báo: vị trí y</label><input type="number" data-k="toastY" placeholder="1400"></div>
   </div>
-  <div class="card"><h3>Sân chờ (quảng trường)</h3>
-    <div class="row"><label>Mép trên: y / x trái / x phải</label><input type="number" data-k="yard.topY" style="width:60px"><input type="number" data-k="yard.topX0" style="width:60px"><input type="number" data-k="yard.topX1" style="width:60px"></div>
-    <div class="row"><label>Mép dưới: y / x trái / x phải</label><input type="number" data-k="yard.bottomY" style="width:60px"><input type="number" data-k="yard.bottomX0" style="width:60px"><input type="number" data-k="yard.bottomX1" style="width:60px"></div>
-    <div class="row"><label>Cao nhân vật xa / gần</label><input type="number" data-k="yard.charTop"><input type="number" data-k="yard.charBottom"></div>
-    <div class="row"><label>Hiện tối đa trên sân</label><input type="number" data-k="yard.maxShow"></div>
-    <div class="row"><label>Tốc độ đi lang thang</label><input type="number" data-k="yard.walkSpeed"></div>
-    <div class="row"><label>Bay lên cầu: thời gian (s) / độ cao</label><input type="number" step="0.1" data-k="yard.flySec"><input type="number" data-k="yard.flyHeight"></div>
-    <div class="hint">Bật "Hiện đường đi" để thấy khung sân chờ (nét vàng).</div>
+  <div class="card"><h3>Bảng hàng chờ (góc trên trái)</h3>
+    <div class="row"><input type="checkbox" data-k="queueBoard.show"> Hiện bảng hàng chờ</div>
+    <div class="row"><label>X / Y / Rộng</label><input type="number" data-k="queueBoard.x"><input type="number" data-k="queueBoard.y"><input type="number" data-k="queueBoard.w"></div>
+    <div class="row"><label>Số dòng / cao dòng / cỡ chữ</label><input type="number" data-k="queueBoard.rows"><input type="number" data-k="queueBoard.rowH"><input type="number" data-k="queueBoard.fontSize"></div>
   </div>
   <div class="card"><h3>Bảng chat (góc trên phải)</h3>
     <div class="row"><input type="checkbox" data-k="chat.show"> Hiện chat</div>
     <div class="row"><label>X / Y</label><input type="number" data-k="chat.x"><input type="number" data-k="chat.y"></div>
     <div class="row"><label>Rộng / Cao</label><input type="number" data-k="chat.w"><input type="number" data-k="chat.h"></div>
     <div class="row"><label>Số tin / cỡ chữ</label><input type="number" data-k="chat.lines"><input type="number" data-k="chat.fontSize"></div>
-    <div class="row"><label>Khi đang hôn: X / Y</label><input type="number" data-k="chat.kissX"><input type="number" data-k="chat.kissY"></div>
-    <div class="row"><label>Khi đang hôn: Rộng / Cao</label><input type="number" data-k="chat.kissW"><input type="number" data-k="chat.kissH"></div>
     <div class="row"><label>Độ mờ nền</label><input type="range" min="0" max="0.8" step="0.05" data-k="chat.bgAlpha"><span data-show="chat.bgAlpha"></span></div>
   </div>
 </section>
