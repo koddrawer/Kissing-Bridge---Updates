@@ -214,12 +214,26 @@ function newPerson(user) {
   if (p.avatar) loadAvatar(p);
   return p;
 }
-let avFail = 0;
-function loadAvatar(p) {
-  loadRemote(p.avatar).then(im => {
-    if (im) { p.avatarImg = im; p._comp = null; }
-    else if (!/^data:/.test(p.avatar) && (avFail++ < 3 || avFail % 50 === 0)) log('⚠️ Không tải được avatar của ' + p.name + ' (' + String(p.avatar).slice(0, 60) + '…)');
-  });
+let avFail = 0, avOk = 0;
+function altUrls(u) {                       // TikTok CDN serves the same picture as webp / jpeg / heic
+  const out = [u];
+  if (/\.heic/i.test(u)) out.push(u.replace(/\.heic/i, '.jpeg'), u.replace(/\.heic/i, '.webp'));
+  else if (/\.webp/i.test(u)) out.push(u.replace(/\.webp/i, '.jpeg'));
+  else if (/\.jpe?g/i.test(u)) out.push(u.replace(/\.jpe?g/i, '.webp'));
+  return out;
+}
+async function loadAvatar(p) {
+  const src = p.avatar;
+  for (const u of /^data:/.test(src) ? [src] : altUrls(src)) {
+    const im = await loadRemote(u);
+    if (im && im.width) {
+      if (p.avatar !== src) return;
+      p.avatarImg = im; p._comp = null;
+      if (!/^data:/.test(src) && avOk++ === 0) log('✅ Đã tải avatar TikTok đầu tiên (' + p.name + ')');
+      return;
+    }
+  }
+  if (!/^data:/.test(src) && (avFail++ < 3 || avFail % 50 === 0)) log('⚠️ Không tải được avatar của ' + p.name + ': ' + String(src).slice(0, 90));
 }
 function sortQueue() {
   QUEUE.sort((a, b) => (b.prio - a.prio) || ((b.coins > 0) - (a.coins > 0)) || (b.coins - a.coins) || ((a.donorSeq || a.seq) - (b.donorSeq || b.seq)));
@@ -270,8 +284,13 @@ function onChat(user, text) {
   loadRemote(user.avatar).then(im => { const m = chat.find(c => c.name === user.name && c.text === text); if (m) m.avatar = im; });
   while (chat.length > 30) chat.shift();
 }
+let diagN = 0;
 function handleEvent(ev) {
   const j = cfg.join;
+  if (ev.user && !String(ev.user.id || '').startsWith('test_') && diagN < 5) {
+    diagN++;
+    log(`👤 [${ev.type}] ${ev.user.name} — link avatar: ${ev.user.avatar ? 'CÓ' : 'KHÔNG CÓ (exe cũ hoặc TikTok không gửi)'}`);
+  }
   switch (ev.type) {
     case 'chat': onChat(ev.user, ev.text); if (j.onComment) enqueue(ev.user, 'chat'); break;
     case 'join': if (j.onMember) enqueue(ev.user, 'join'); break;

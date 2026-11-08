@@ -198,5 +198,7 @@ API.onSettings(s => { S = s; fill(); });
   $('#ver').textContent = `exe v${info.version} · nội dung v${info.appVersion}`;
   $('#paths').textContent = 'Dữ liệu: ' + info.userData + '\nApp: ' + info.appDir;
   fill();
-  log('Bảng điều khiển sẵn sàng');
+  log('Bảng điều khiển sẵn sàng · exe v' + info.version + ' · nội dung v' + info.appVersion);
+  { const v = String(info.version || '0').split('.').map(Number);
+    if (v[0] < 1 || (v[0] === 1 && v[1] === 0 && (v[2] || 0) < 5)) log('⚠️ Bạn đang chạy exe v' + info.version + ' — cần exe 1.0.5 trở lên thì mới hiện được avatar người xem TikTok. Hãy mở file KissingBridgeLive-1.0.5-portable.exe.'); }
 })();
