@@ -214,7 +214,13 @@ function newPerson(user) {
   if (p.avatar) loadAvatar(p);
   return p;
 }
-function loadAvatar(p) { loadRemote(p.avatar).then(im => { if (im) { p.avatarImg = im; p._comp = null; } }); }
+let avFail = 0;
+function loadAvatar(p) {
+  loadRemote(p.avatar).then(im => {
+    if (im) { p.avatarImg = im; p._comp = null; }
+    else if (!/^data:/.test(p.avatar) && (avFail++ < 3 || avFail % 50 === 0)) log('⚠️ Không tải được avatar của ' + p.name + ' (' + String(p.avatar).slice(0, 60) + '…)');
+  });
+}
 function sortQueue() {
   QUEUE.sort((a, b) => (b.prio - a.prio) || ((b.coins > 0) - (a.coins > 0)) || (b.coins - a.coins) || ((a.donorSeq || a.seq) - (b.donorSeq || b.seq)));
 }
