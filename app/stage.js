@@ -605,9 +605,32 @@ function drawStanding(p, side, k, t) {
   drawPerson(p, x, K.feetY - bob, K.charH * 0.95, 'stand', false, alpha);
   ctx.globalAlpha = alpha; drawNameTag(p, x, K.feetY - K.charH - 30, 30); ctx.globalAlpha = 1;
 }
+// ---- camera zoom vào 2 khuôn mặt khi hôn
+let zoomK = 0;                                        // 0 = toàn cảnh, 1 = zoom hết cỡ
+function zoomCfg() { return Object.assign({ enable: true, scale: 1.8, inSec: .8, outSec: .7, screenY: 760 }, (cfg.kiss || {}).zoom || {}); }
+function updZoom(dt) {
+  const Z = zoomCfg(), T = cfg.timing;
+  let target = 0;
+  if (Z.enable && cur && cur.phase === 'kiss') target = cur.t < T.kissSec - Z.outSec ? 1 : 0;
+  const sp = 1 / Math.max(.1, target > zoomK ? Z.inSec : Z.outSec);
+  zoomK = target > zoomK ? Math.min(target, zoomK + dt * sp) : Math.max(target, zoomK - dt * sp);
+}
 function drawScene() {
-  ctx.drawImage(IMG.kiss, 0, 0, WW, WH);
+  const Z = zoomCfg(), e = ease(zoomK);
+  ctx.save();
+  if (e > 0 && cur && cur.b) {
+    const la = kissLayout(cur.a, 'L'), lb = kissLayout(cur.b, 'R');
+    const fx = WW / 2, fy = (la.lipY + lb.lipY) / 2, s = lerp(1, Z.scale, e), sy = lerp(fy, Z.screenY, e);
+    ctx.translate(WW / 2, sy); ctx.scale(s, s); ctx.translate(-fx, -fy);
+  }
+  drawSceneWorld();
+  drawHearts(true); drawHearts(false);
+  ctx.restore();
   drawQueueBoard();
+  drawRibbon();
+}
+function drawSceneWorld() {
+  ctx.drawImage(IMG.kiss, 0, 0, WW, WH);
   const t = now(), K = cfg.kiss, T = cfg.timing;
   if (!cur) {
     ctx.globalAlpha = .75 + Math.sin(t * 2) * .2;
@@ -672,7 +695,10 @@ function drawScene() {
     ctx.globalAlpha = 1;
     for (const s of sparkles) drawSparkle(s.x, s.y, 10 * Math.sin(s.t / .8 * Math.PI), Math.sin(s.t / .8 * Math.PI));
   }
-  // ribbon title
+}
+function drawRibbon() {
+  const C = cur, K = cfg.kiss;
+  if (!C) return;
   const tier = C.tier && cfg.tiers[C.tier - 1];
   const title = (C.phase === 'showcase' || (C.phase === 'exit' && C.from === 'showcase')) && tier ? '🎉 ' + tierLabel(tier) + ' 🎉' : ((isEN() ? EN().panelTitle : K.panelTitle) || S('panelTitle'));
   const R = cfg.ribbon || {}, ty = R.y ?? 92;
@@ -794,8 +820,8 @@ function frame() {
   updHearts(dt);
   ctx.setTransform(SC, 0, 0, SC, 0, 0);
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  updZoom(dt);
   drawScene();
-  drawHearts(true); drawHearts(false);
   drawChat();
   drawToasts(dt);
   drawTicker(dt);
@@ -928,6 +954,7 @@ async function migrateV9() {
 (async function boot() {
   cfg = await API.getSettings();
   if ((cfg.schema || 0) < 9) await migrateV9();
+  if ((cfg.schema || 0) < 10) cfg = await API.setSettings({ schema: 10, kiss: { zoom: { enable: true, scale: 1.8, inSec: .8, outSec: .7, screenY: 760 } } });
   await Promise.all(['800 20px B2', '20px PX'].map(f => document.fonts.load(f, 'Aàáạ')));
   await loadAssets();
   restore(await API.restoreState());

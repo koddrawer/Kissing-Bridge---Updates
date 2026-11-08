@@ -67,6 +67,12 @@
     <div class="pair" id="pairNow">—</div>
     <div class="hint">Hàng chờ: <b id="cQueue">0</b> người · Số nụ hôn: <b id="cDone">0</b> · Giọng đang chờ đọc: <b id="cVoice">0</b></div>
   </div>
+  <div class="card"><h3>Cảnh hôn</h3>
+    <div class="row"><label>Thời gian hôn (giây)</label><input type="range" min="2" max="30" step="0.5" data-k="timing.kissSec"><span data-show="timing.kissSec"></span>s</div>
+    <div class="row"><input type="checkbox" data-k="kiss.zoom.enable"> Zoom sát 2 khuôn mặt khi hôn</div>
+    <div class="row"><label>Mức zoom</label><input type="range" min="1.1" max="3" step="0.05" data-k="kiss.zoom.scale"><span data-show="kiss.zoom.scale"></span>x</div>
+    <div class="row"><label>Đứng trong khung donate (giây)</label><input type="range" min="2" max="20" step="0.5" data-k="timing.showcaseSec"><span data-show="timing.showcaseSec"></span>s</div>
+  </div>
   <div class="card"><h3>Ai được vào hàng chờ</h3>
     <div class="row"><input type="checkbox" data-k="join.onMember"> Vào xem live &nbsp; <input type="checkbox" data-k="join.onComment"> Bình luận &nbsp; <input type="checkbox" data-k="join.onFollow"> Follow (1 lần) &nbsp; <input type="checkbox" data-k="join.onShare"> Chia sẻ &nbsp; <input type="checkbox" data-k="join.onLike"> Thả tim</div>
     <div class="row"><label>Hôn xong được xếp lại sau (phút)</label><input type="number" min="0" data-k="join.rejoinMinutes"></div>
@@ -194,6 +200,8 @@
     <div class="row"><label>Số tim bay quanh</label><input type="number" data-k="kiss.hearts"></div>
     <div class="row"><label>Đứng trong khung: cao / chân y</label><input type="number" data-k="kiss.showcaseCharH"><input type="number" data-k="kiss.showcaseFeetY"></div>
     <div class="row"><label>Khung: rộng / tâm y</label><input type="number" data-k="kiss.frameW"><input type="number" data-k="kiss.frameY"></div>
+    <div class="row"><label>Zoom: vào / ra (giây)</label><input type="number" step="0.1" data-k="kiss.zoom.inSec"><input type="number" step="0.1" data-k="kiss.zoom.outSec"></div>
+    <div class="row"><label>Zoom: vị trí mặt trên màn (y)</label><input type="number" data-k="kiss.zoom.screenY" placeholder="760"></div>
     <div class="row"><label>Thông báo: vị trí y</label><input type="number" data-k="toastY" placeholder="1400"></div>
   </div>
   <div class="card"><h3>Bảng hàng chờ (góc trên trái)</h3>
